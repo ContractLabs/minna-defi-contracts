@@ -15,13 +15,12 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     uint256 private storageChainId;
-    address private owner;
     FeeInfo public feeInfo;
     EnumerableSet.AddressSet private __supportedTokens;
     mapping(address => Subscriber[]) private __subscribers;
 
-    constructor(address owner_) {
-        owner = owner_;
+    constructor(address owner_) Ownable() {
+        _transferOwnership(owner_);
     }
 
     function setWhichChainUseStorage(uint256 chainId_) external onlyOwner {
@@ -29,6 +28,8 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
     }
 
     function setFeeInfo(address recipient_, uint96 amount_) external onlyOwner {
+        emit NewFeeInfo(owner(), feeInfo, FeeInfo(recipient_, amount_));
+
         feeInfo.recipient = recipient_;
         feeInfo.amount = amount_;
     }
@@ -44,6 +45,8 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
                 ++i;
             }
         }
+
+        emit FeeTokensUpdated(owner(), feeTokens_);
     }
 
     function subscribe(
@@ -75,32 +78,60 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
 
     function claimFees(address paymentToken_) external onlyOwner {
         uint256 length = __subscribers[paymentToken_].length;
+        bool[] memory successArr;
+        bytes[] memory result;
         for (uint256 i; i < length; ) {
-            IERC20(paymentToken_).transferFrom(
-                __subscribers[paymentToken_][i].account,
-                owner,
-                feeInfo.amount
+            (bool success, bytes memory data) = paymentToken_.call(
+                abi.encodeWithSignature(
+                    "transferFrom(address, address, uint256)",
+                    __subscribers[paymentToken_][i].account,
+                    owner(),
+                    feeInfo.amount
+                )
             );
+            // IERC20(paymentToken_).transferFrom(
+            //     __subscribers[paymentToken_][i].account,
+            //     owner(),
+            //     feeInfo.amount
+            // );
+            successArr[i] = success;
+            result[i] = data;
 
             unchecked {
                 ++i;
             }
         }
+
+        emit Claimed(owner(), successArr, result);
     }
 
     function claimFees(ClaimInfo[] calldata claimInfo_) external onlyOwner {
         uint256 length = claimInfo_.length;
+        bool[] memory successArr;
+        bytes[] memory result;
         for (uint256 i; i < length; ) {
-            IERC20(claimInfo_[i].token).transferFrom(
-                claimInfo_[i].account,
-                owner,
-                feeInfo.amount
+            (bool success, bytes memory data) = claimInfo_[i].token.call(
+                abi.encodeWithSignature(
+                    "transferFrom(address, address, uint256)",
+                    claimInfo_[i].account,
+                    owner(),
+                    feeInfo.amount
+                )
             );
+            // IERC20(claimInfo_[i].token).transferFrom(
+            //     claimInfo_[i].account,
+            //     owner(),
+            //     feeInfo.amount
+            // );
+            successArr[i] = success;
+            result[i] = data;
 
             unchecked {
                 ++i;
             }
         }
+
+        emit Claimed(owner(), successArr, result);
     }
 
     function getChainId() private view returns (uint256 chainId) {
