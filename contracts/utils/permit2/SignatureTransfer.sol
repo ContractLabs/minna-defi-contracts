@@ -160,10 +160,7 @@ contract SignatureTransfer is ISignatureTransfer, EIP712 {
     }
 
     /// @inheritdoc ISignatureTransfer
-    function invalidateUnorderedNonces(
-        uint256 wordPos,
-        uint256 mask
-    ) external {
+    function invalidateUnorderedNonces(uint256 wordPos, uint256 mask) external {
         nonceBitmap[msg.sender][wordPos] |= mask;
 
         emit UnorderedNonceInvalidation(msg.sender, wordPos, mask);

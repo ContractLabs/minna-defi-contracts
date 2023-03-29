@@ -30,9 +30,7 @@ contract AllowanceTransfer is IAllowanceTransfer, EIP712 {
         uint160 amount,
         uint48 expiration
     ) external {
-        PackedAllowance storage allowed = allowance[msg.sender][token][
-            spender
-        ];
+        PackedAllowance storage allowed = allowance[msg.sender][token][spender];
         allowed.updateAmountAndExpiration(amount, expiration);
         emit Approval(msg.sender, token, spender, amount, expiration);
     }
