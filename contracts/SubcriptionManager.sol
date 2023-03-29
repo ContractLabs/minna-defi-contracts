@@ -13,17 +13,26 @@ import {ISubscriptionManager} from "./interfaces/ISubscriptionManager.sol";
 
 import {SigUtil} from "./libraries/SigUtil.sol";
 import {Bytes32Address} from "./libraries/Bytes32Address.sol";
+import {
+    SafeCurrencyTransferHandler
+} from "./libraries/SafeCurrencyTransferHandler.sol";
 
 contract SubscriptionManager is ISubscriptionManager, Ownable {
     using SigUtil for bytes;
     using EnumerableSet for *;
     using Bytes32Address for *;
+    using SafeCurrencyTransferHandler for address;
 
     FeeInfo public feeInfo;
     uint256 private __useStorage = 2;
 
     EnumerableSet.AddressSet private __supportedTokens;
     mapping(address => EnumerableSet.UintSet) private __subscribers;
+
+    modifier whenUseStorage() {
+        _checkUseStorage();
+        _;
+    }
 
     constructor(
         uint96 amount_,
@@ -97,20 +106,25 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
             __subscribers[token_].add(account_.fillLast96Bits());
     }
 
-    function claimFees(address paymentToken_) external onlyOwner {
-        if (!isUseStorage()) revert SubscriptionManager__InvalidChain();
-
-        uint256 length = __subscribers[paymentToken_].length();
+    function claimFees(
+        address paymentToken_
+    ) external whenUseStorage onlyOwner {
+        EnumerableSet.UintSet storage subscribers = __subscribers[
+            paymentToken_
+        ];
+        uint256 length = subscribers.length();
         bool[] memory success = new bool[](length);
         bytes[] memory results = new bytes[](length);
 
         FeeInfo memory _feeInfo = feeInfo;
+
+        uint256 subscriber;
         for (uint256 i; i < length; ) {
             (success[i], results[i]) = paymentToken_.call(
                 abi.encodeCall(
                     IERC20.transferFrom,
                     (
-                        __subscribers[paymentToken_].at(i).fromFirst160Bits(),
+                        (subscriber = subscribers.at(i)).fromFirst160Bits(),
                         _feeInfo.recipient,
                         _feeInfo.amount
                     )
@@ -118,10 +132,7 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
             );
 
             // blacklist user if call failed
-            if (!success[i])
-                __subscribers[paymentToken_].remove(
-                    __subscribers[paymentToken_].at(i)
-                );
+            if (!success[i]) subscribers.remove(subscriber);
 
             unchecked {
                 ++i;
@@ -157,7 +168,7 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
 
     function viewSubscribers(
         address paymentToken_
-    ) public view returns (address[] memory subscribers) {
+    ) public view whenUseStorage returns (address[] memory subscribers) {
         uint256[] memory data = __subscribers[paymentToken_].values();
         assembly {
             subscribers := data
@@ -169,6 +180,7 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
     )
         external
         view
+        whenUseStorage
         returns (address[] memory accounts, uint256[] memory allowances)
     {
         accounts = viewSubscribers(token_);
@@ -191,5 +203,9 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
 
     function isUseStorage() public view returns (bool) {
         return __useStorage == 3;
+    }
+
+    function _checkUseStorage() internal view {
+        if (!isUseStorage()) revert SubscriptionManager__InvalidChain();
     }
 }
