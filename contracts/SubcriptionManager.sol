@@ -11,14 +11,19 @@ import {
 } from "oz-custom/contracts/oz/token/ERC20/extensions/IERC20Permit.sol";
 import {ISubscriptionManager} from "./interfaces/ISubscriptionManager.sol";
 
+import {SigUtil} from "./libraries/SigUtil.sol";
+import {Bytes32Address} from "./libraries/Bytes32Address.sol";
+
 contract SubscriptionManager is ISubscriptionManager, Ownable {
-    using EnumerableSet for EnumerableSet.AddressSet;
+    using SigUtil for bytes;
+    using EnumerableSet for *;
+    using Bytes32Address for *;
 
     FeeInfo public feeInfo;
     uint256 private __useStorage = 2;
 
     EnumerableSet.AddressSet private __supportedTokens;
-    mapping(address => Subscriber[]) private __subscribers;
+    mapping(address => EnumerableSet.UintSet) private __subscribers;
 
     constructor(
         uint96 amount_,
@@ -70,32 +75,32 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
     function subscribe(
         address token_,
         address account_,
+        uint256 nonce_,
         uint256 deadline_,
-        uint8 v_,
-        bytes32 r_,
-        bytes32 s_
+        bytes calldata signature_
     ) external {
         if (!__supportedTokens.contains(token_))
             revert SubscriptionManager__UnsupportedToken(token_);
 
+        (bytes32 r, bytes32 s, uint8 v) = signature_.split();
         IERC20Permit(token_).permit(
             account_,
             address(this),
             feeInfo.amount,
             deadline_,
-            v_,
-            r_,
-            s_
+            v,
+            r,
+            s
         );
 
         if (isUseStorage())
-            __subscribers[token_].push(Subscriber(account_, false));
+            __subscribers[token_].add(account_.fillLast96Bits());
     }
 
     function claimFees(address paymentToken_) external onlyOwner {
         if (!isUseStorage()) revert SubscriptionManager__InvalidChain();
 
-        uint256 length = __subscribers[paymentToken_].length;
+        uint256 length = __subscribers[paymentToken_].length();
         bool[] memory success = new bool[](length);
         bytes[] memory results = new bytes[](length);
 
@@ -105,7 +110,7 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
                 abi.encodeCall(
                     IERC20.transferFrom,
                     (
-                        __subscribers[paymentToken_][i].account,
+                        __subscribers[paymentToken_].at(i).fromFirst160Bits(),
                         _feeInfo.recipient,
                         _feeInfo.amount
                     )
@@ -114,7 +119,9 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
 
             // blacklist user if call failed
             if (!success[i])
-                __subscribers[paymentToken_][i].isBlacklisted = true;
+                __subscribers[paymentToken_].remove(
+                    __subscribers[paymentToken_].at(i)
+                );
 
             unchecked {
                 ++i;
@@ -150,8 +157,32 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
 
     function viewSubscribers(
         address paymentToken_
-    ) external view returns (Subscriber[] memory) {
-        return __subscribers[paymentToken_];
+    ) public view returns (address[] memory subscribers) {
+        uint256[] memory data = __subscribers[paymentToken_].values();
+        assembly {
+            subscribers := data
+        }
+    }
+
+    function viewClaimableAllowance(
+        address token_
+    )
+        external
+        view
+        returns (address[] memory accounts, uint256[] memory allowances)
+    {
+        accounts = viewSubscribers(token_);
+        uint256 length = accounts.length;
+        allowances = new uint256[](length);
+        for (uint256 i; i < length; ) {
+            allowances[i] = IERC20(token_).allowance(
+                accounts[i],
+                address(this)
+            );
+            unchecked {
+                ++i;
+            }
+        }
     }
 
     function viewSupportedTokens() external view returns (address[] memory) {

@@ -6,6 +6,13 @@ interface ISubscriptionManager {
     error SubscriptionManager__Unauthorized(address caller);
     error SubscriptionManager__UnsupportedToken(address token);
 
+    struct TokenPermission {
+        address token;
+        uint256 nonce;
+        uint256 deadline;
+        bytes signature;
+    }
+
     struct FeeToken {
         address token;
         bool isSet;
@@ -23,7 +30,7 @@ interface ISubscriptionManager {
 
     struct Subscriber {
         address account;
-        bool isBlacklisted;
+        uint64 duration;
     }
 
     event ToggleUseStorage(address indexed operator, bool indexed isUse);
@@ -47,19 +54,25 @@ interface ISubscriptionManager {
     function subscribe(
         address token_,
         address account_,
+        uint256 nonce_,
         uint256 deadline_,
-        uint8 v_,
-        bytes32 r_,
-        bytes32 s_
+        bytes calldata signature_
     ) external;
 
     function claimFees(address paymentToken_) external;
 
     function claimFees(ClaimInfo[] calldata claimInfo_) external;
 
+    function viewClaimableAllowance(
+        address token_
+    )
+        external
+        view
+        returns (address[] memory account, uint256[] memory allowances);
+
     function viewSubscribers(
         address paymentToken_
-    ) external view returns (Subscriber[] memory);
+    ) external view returns (address[] memory);
 
     function viewSupportedTokens() external view returns (address[] memory);
 
