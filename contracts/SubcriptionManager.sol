@@ -14,24 +14,38 @@ import {ISubscriptionManager} from "./interfaces/ISubscriptionManager.sol";
 contract SubscriptionManager is ISubscriptionManager, Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
 
-    uint256 private storageChainId;
     FeeInfo public feeInfo;
+    uint256 private __useStorage = 2;
 
     EnumerableSet.AddressSet private __supportedTokens;
     mapping(address => Subscriber[]) private __subscribers;
 
-    constructor(address owner_, bool useStorage_) payable Ownable() {
-        _transferOwnership(owner_);
+    constructor(
+        uint96 amount_,
+        bool useStorage_,
+        address recipient_
+    ) payable Ownable() {
+        _setFeeInfo(recipient_, amount_);
+        if (useStorage_) _toggleUseStorage();
     }
 
-    function setWhichChainUseStorage(uint256 chainId_) external onlyOwner {
-        storageChainId = chainId_;
+    function _toggleUseStorage() internal {
+        emit ToggleUseStorage(_msgSender(), !isUseStorage());
+        __useStorage ^= 1;
+    }
+
+    function toggleUseStorage() external onlyOwner {
+        _toggleUseStorage();
     }
 
     function setFeeInfo(address recipient_, uint96 amount_) external onlyOwner {
-        emit NewFeeInfo(_msgSender(), feeInfo, FeeInfo(recipient_, amount_));
+        _setFeeInfo(recipient_, amount_);
+    }
 
+    function _setFeeInfo(address recipient_, uint96 amount_) internal {
         FeeInfo memory _feeInfo = FeeInfo(recipient_, amount_);
+        emit NewFeeInfo(_msgSender(), feeInfo, _feeInfo);
+
         feeInfo = _feeInfo;
     }
 
@@ -74,13 +88,12 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
             s_
         );
 
-        if (block.chainid == storageChainId)
+        if (isUseStorage())
             __subscribers[token_].push(Subscriber(account_, false));
     }
 
     function claimFees(address paymentToken_) external onlyOwner {
-        if (block.chainid != storageChainId)
-            revert SubscriptionManager__InvalidChain();
+        if (!isUseStorage()) revert SubscriptionManager__InvalidChain();
 
         uint256 length = __subscribers[paymentToken_].length;
         bool[] memory success = new bool[](length);
@@ -112,8 +125,7 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
     }
 
     function claimFees(ClaimInfo[] calldata claimInfo_) external onlyOwner {
-        if (block.chainid == storageChainId)
-            revert SubscriptionManager__InvalidChain();
+        if (isUseStorage()) revert SubscriptionManager__InvalidChain();
 
         uint256 length = claimInfo_.length;
         bool[] memory success = new bool[](length);
@@ -144,5 +156,9 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
 
     function viewSupportedTokens() external view returns (address[] memory) {
         return __supportedTokens.values();
+    }
+
+    function isUseStorage() public view returns (bool) {
+        return __useStorage == 3;
     }
 }

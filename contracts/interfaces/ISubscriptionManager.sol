@@ -26,6 +26,8 @@ interface ISubscriptionManager {
         bool isBlacklisted;
     }
 
+    event ToggleUseStorage(address indexed operator, bool indexed isUse);
+
     event Claimed(address indexed operator, bool[] success, bytes[] results);
 
     event NewFeeInfo(
@@ -36,7 +38,7 @@ interface ISubscriptionManager {
 
     event FeeTokensUpdated(address indexed operator, FeeToken[] feeTokens);
 
-    function setWhichChainUseStorage(uint256 chainId_) external;
+    function toggleUseStorage() external;
 
     function setFeeInfo(address recipient_, uint96 amount_) external;
 
@@ -60,4 +62,6 @@ interface ISubscriptionManager {
     ) external view returns (Subscriber[] memory);
 
     function viewSupportedTokens() external view returns (address[] memory);
+
+    function isUseStorage() external view returns (bool);
 }
