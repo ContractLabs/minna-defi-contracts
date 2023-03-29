@@ -6,6 +6,8 @@ import {
 } from "oz-custom/contracts/oz/utils/structs/EnumerableSet.sol";
 import {Ownable} from "oz-custom/contracts/oz/access/Ownable.sol";
 
+import {FundRecoverable} from "./internal/FundRecoverable.sol";
+
 import {
     IERC20Permit
 } from "oz-custom/contracts/oz/token/ERC20/extensions/IERC20Permit.sol";
@@ -16,7 +18,7 @@ import {SigUtil} from "./libraries/SigUtil.sol";
 import {ErrorHandler} from "./libraries/ErrorHandler.sol";
 import {FixedPointMathLib} from "./libraries/FixedPointMathLib.sol";
 
-contract SubscriptionManager is ISubscriptionManager, Ownable {
+contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
     using SigUtil for bytes;
     using EnumerableSet for *;
     using ErrorHandler for bool;
@@ -351,6 +353,10 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
     function _toggleUseStorage() internal {
         emit ToggleUseStorage(_msgSender(), !isUseStorage());
         __useStorage ^= 1;
+    }
+
+    function _beforeRecover(bytes memory) internal override {
+        _checkOwner(_msgSender());
     }
 
     function _checkUseStorage() internal view {
