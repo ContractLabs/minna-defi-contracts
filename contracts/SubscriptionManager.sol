@@ -6,7 +6,7 @@ import {
 } from "oz-custom/contracts/oz/utils/structs/EnumerableSet.sol";
 import {Ownable} from "oz-custom/contracts/oz/access/Ownable.sol";
 
-import {FundRecoverable} from "./internal/FundRecoverable.sol";
+import {ErrorHandler, FundRecoverable} from "./internal/FundRecoverable.sol";
 
 import {
     IERC20Permit
@@ -14,9 +14,10 @@ import {
 import {IERC20, IPermit2} from "./utils/permit2/interfaces/IPermit2.sol";
 import {ISubscriptionManager} from "./interfaces/ISubscriptionManager.sol";
 
-import {SigUtil} from "./libraries/SigUtil.sol";
-import {ErrorHandler} from "./libraries/ErrorHandler.sol";
-import {FixedPointMathLib} from "./libraries/FixedPointMathLib.sol";
+import {
+    FixedPointMathLib
+} from "oz-custom/contracts/libraries/FixedPointMathLib.sol";
+import {SigUtil} from "oz-custom/contracts/libraries/SigUtil.sol";
 
 contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
     using SigUtil for bytes;
@@ -27,7 +28,7 @@ contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
     FeeInfo public feeInfo;
     IPermit2 public permit2;
 
-    uint256 private __useStorage = 2;
+    uint256 private __useStorage;
 
     mapping(address => bool) private __isUsePermit2;
 
@@ -48,6 +49,7 @@ contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
         IPermit2 permit2_,
         address recipient_
     ) payable Ownable() {
+        __useStorage = 2;
         _setPermit2(permit2_);
         if (useStorage_) _toggleUseStorage();
         _setFeeInfo(recipient_, amount_, feeInfo);
@@ -132,9 +134,9 @@ contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
                     permitSingle: IPermit2.PermitSingle({
                         details: IPermit2.PermitDetails({
                             token: token,
-                            amount: uint160(payment_.amount),
-                            expiration: uint48(payment_.approvalExpiration),
-                            nonce: uint48(payment_.nonce)
+                            amount: payment_.amount,
+                            expiration: payment_.approvalExpiration,
+                            nonce: payment_.nonce
                         }),
                         spender: address(this),
                         sigDeadline: payment_.deadline
@@ -162,7 +164,7 @@ contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
             token,
             account_,
             _feeInfo.recipient,
-            feeAmount
+            uint160(feeAmount)
         );
         ok.handleRevertIfNotSuccess(returnOrRevertData);
 
@@ -330,13 +332,13 @@ contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
         address token_,
         address from_,
         address to_,
-        uint256 amount_
+        uint160 amount_
     ) internal returns (bool success, bytes memory returnOrRevertData) {
         if (usePermit2_)
             (success, returnOrRevertData) = permit2_.call(
                 abi.encodeCall(
                     IPermit2.transferFrom,
-                    (from_, to_, uint160(amount_), token_)
+                    (from_, to_, amount_, token_)
                 )
             );
         else
@@ -355,7 +357,7 @@ contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
         __useStorage ^= 1;
     }
 
-    function _beforeRecover(bytes memory) internal override {
+    function _beforeRecover(bytes memory) internal view override {
         _checkOwner(_msgSender());
     }
 

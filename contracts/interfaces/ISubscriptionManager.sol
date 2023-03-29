@@ -12,10 +12,10 @@ interface ISubscriptionManager {
 
     struct Payment {
         address token;
-        uint256 amount;
-        uint256 nonce;
+        uint48 nonce;
+        uint160 amount;
         uint256 deadline;
-        uint256 approvalExpiration;
+        uint48 approvalExpiration;
         bytes signature;
     }
 

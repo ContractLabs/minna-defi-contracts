@@ -5,7 +5,7 @@ import {Context} from "oz-custom/contracts/oz/utils/Context.sol";
 
 import {IFundRecoverable} from "./interfaces/IFundRecoverable.sol";
 
-import {ErrorHandler} from "../libraries/ErrorHandler.sol";
+import {ErrorHandler} from "oz-custom/contracts/libraries/ErrorHandler.sol";
 
 abstract contract FundRecoverable is Context, IFundRecoverable {
     using ErrorHandler for bool;
