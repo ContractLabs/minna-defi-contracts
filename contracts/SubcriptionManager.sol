@@ -57,7 +57,7 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
         bytes32 r_,
         bytes32 s_
     ) external {
-        if (token_ != address(0))
+        if (token_ == address(0))
             revert SubscriptionManager__UnsupportedToken(token_);
 
         IERC20Permit(token_).permit(
@@ -77,23 +77,21 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
     }
 
     function claimFees(address paymentToken_) external onlyOwner {
+        if (getChainId() != storageChainId) {
+            revert SubscriptionManager__InvalidChain();
+        }
         uint256 length = __subscribers[paymentToken_].length;
-        bool[] memory successArr;
-        bytes[] memory result;
+        bool[] memory successArr = new bool[](length);
+        bytes[] memory result = new bytes[](length);
         for (uint256 i; i < length; ) {
             (bool success, bytes memory data) = paymentToken_.call(
                 abi.encodeWithSignature(
                     "transferFrom(address, address, uint256)",
                     __subscribers[paymentToken_][i].account,
-                    owner(),
+                    feeInfo.recipient,
                     feeInfo.amount
                 )
             );
-            // IERC20(paymentToken_).transferFrom(
-            //     __subscribers[paymentToken_][i].account,
-            //     owner(),
-            //     feeInfo.amount
-            // );
             successArr[i] = success;
             result[i] = data;
 
@@ -106,23 +104,21 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
     }
 
     function claimFees(ClaimInfo[] calldata claimInfo_) external onlyOwner {
+        if (getChainId() == storageChainId) {
+            revert SubscriptionManager__InvalidChain();
+        }
         uint256 length = claimInfo_.length;
-        bool[] memory successArr;
-        bytes[] memory result;
+        bool[] memory successArr = new bool[](length);
+        bytes[] memory result = new bytes[](length);
         for (uint256 i; i < length; ) {
             (bool success, bytes memory data) = claimInfo_[i].token.call(
                 abi.encodeWithSignature(
                     "transferFrom(address, address, uint256)",
                     claimInfo_[i].account,
-                    owner(),
+                    feeInfo.recipient,
                     feeInfo.amount
                 )
             );
-            // IERC20(claimInfo_[i].token).transferFrom(
-            //     claimInfo_[i].account,
-            //     owner(),
-            //     feeInfo.amount
-            // );
             successArr[i] = success;
             result[i] = data;
 
