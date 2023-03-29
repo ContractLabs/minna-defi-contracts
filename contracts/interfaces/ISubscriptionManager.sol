@@ -14,7 +14,7 @@ interface ISubscriptionManager {
         address token;
         uint48 nonce;
         uint160 amount;
-        uint256 deadline;
+        uint256 deadline ;
         uint48 approvalExpiration;
         bytes signature;
     }

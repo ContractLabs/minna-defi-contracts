@@ -183,8 +183,8 @@ contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
         bytes[] memory results = new bytes[](length);
         address[] memory blacklisted = new address[](length);
 
-        uint256 blacklistCount;
         address subscriber;
+        uint256 blacklistCount;
         IPermit2 _permit2 = permit2;
         FeeInfo memory _feeInfo = feeInfo;
         for (uint256 i; i < length; ) {
