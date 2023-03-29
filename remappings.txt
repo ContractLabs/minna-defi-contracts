@@ -1,0 +1,6 @@
+ds-test/=lib/forge-std/lib/ds-test/src/
+forge-std/=lib/forge-std/src/
+oz-custom/=node_modules/oz-custom/
+contracts/=contracts/
+@openzeppelin/=node_modules/@openzeppelin/
+solmate/=node_modules/solmate/
