@@ -5,6 +5,7 @@ interface ISubscriptionManager {
     error SubscriptionManager__InvalidChain();
     error SubscriptionManager__Unauthorized(address caller);
     error SubscriptionManager__UnsupportedToken(address token);
+    error SubscriptionManager__InvalidDeadline(uint256 deadline);
 
     struct TokenPermission {
         address token;
