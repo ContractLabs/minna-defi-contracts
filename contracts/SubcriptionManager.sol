@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
+import {SigUtil} from "./libraries/SigUtil.sol";
+import {Bytes32Address} from "./libraries/Bytes32Address.sol";
 import {
     EnumerableSet
 } from "oz-custom/contracts/oz/utils/structs/EnumerableSet.sol";
@@ -10,6 +12,7 @@ import {
     IERC20Permit
 } from "oz-custom/contracts/oz/token/ERC20/extensions/IERC20Permit.sol";
 import {ISubscriptionManager} from "./interfaces/ISubscriptionManager.sol";
+import {ProxyChecker} from "oz-custom/contracts/internal/ProxyChecker.sol";
 
 import {SigUtil} from "./libraries/SigUtil.sol";
 import {Bytes32Address} from "./libraries/Bytes32Address.sol";
@@ -87,19 +90,28 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
         uint256 nonce_,
         uint256 deadline_,
         bytes calldata signature_
-    ) external {
+    ) external onlyEOA {
         if (!__supportedTokens.contains(token_))
             revert SubscriptionManager__UnsupportedToken(token_);
+        if (deadline_ < block.timestamp)
+            revert SubscriptionManager__InvalidDeadline(deadline_);
 
+        FeeInfo memory _feeInfo = feeInfo;
         (bytes32 r, bytes32 s, uint8 v) = signature_.split();
         IERC20Permit(token_).permit(
             account_,
             address(this),
-            feeInfo.amount,
+            _feeInfo.amount,
             deadline_,
             v,
             r,
             s
+        );
+
+        IERC20(token_).transferFrom(
+            account_,
+            _feeInfo.recipient,
+            _feeInfo.amount
         );
 
         if (isUseStorage())
