@@ -16,10 +16,11 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
 
     uint256 private storageChainId;
     FeeInfo public feeInfo;
+
     EnumerableSet.AddressSet private __supportedTokens;
     mapping(address => Subscriber[]) private __subscribers;
 
-    constructor(address owner_) Ownable() {
+    constructor(address owner_, bool useStorage_) payable Ownable() {
         _transferOwnership(owner_);
     }
 
@@ -28,25 +29,28 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
     }
 
     function setFeeInfo(address recipient_, uint96 amount_) external onlyOwner {
-        emit NewFeeInfo(owner(), feeInfo, FeeInfo(recipient_, amount_));
+        emit NewFeeInfo(_msgSender(), feeInfo, FeeInfo(recipient_, amount_));
 
-        feeInfo.recipient = recipient_;
-        feeInfo.amount = amount_;
+        FeeInfo memory _feeInfo = FeeInfo(recipient_, amount_);
+        feeInfo = _feeInfo;
     }
 
     function setFeeTokens(FeeToken[] calldata feeTokens_) external onlyOwner {
         uint256 length = feeTokens_.length;
+
+        FeeToken memory feeToken;
         for (uint256 i; i < length; ) {
-            feeTokens_[i].isSet
-                ? __supportedTokens.add(feeTokens_[i].token)
-                : __supportedTokens.remove(feeTokens_[i].token);
+            feeToken = feeTokens_[i];
+            feeToken.isSet
+                ? __supportedTokens.add(feeToken.token)
+                : __supportedTokens.remove(feeToken.token);
 
             unchecked {
                 ++i;
             }
         }
 
-        emit FeeTokensUpdated(owner(), feeTokens_);
+        emit FeeTokensUpdated(_msgSender(), feeTokens_);
     }
 
     function subscribe(
@@ -57,7 +61,7 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
         bytes32 r_,
         bytes32 s_
     ) external {
-        if (token_ == address(0))
+        if (!__supportedTokens.contains(token_))
             revert SubscriptionManager__UnsupportedToken(token_);
 
         IERC20Permit(token_).permit(
@@ -70,70 +74,66 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
             s_
         );
 
-        if (getChainId() == storageChainId) {
-            Subscriber memory subscriber = Subscriber(account_, false);
-            __subscribers[token_].push(subscriber);
-        }
+        if (block.chainid == storageChainId)
+            __subscribers[token_].push(Subscriber(account_, false));
     }
 
     function claimFees(address paymentToken_) external onlyOwner {
-        if (getChainId() != storageChainId) {
+        if (block.chainid != storageChainId)
             revert SubscriptionManager__InvalidChain();
-        }
+
         uint256 length = __subscribers[paymentToken_].length;
-        bool[] memory successArr = new bool[](length);
-        bytes[] memory result = new bytes[](length);
+        bool[] memory success = new bool[](length);
+        bytes[] memory results = new bytes[](length);
+
+        FeeInfo memory _feeInfo = feeInfo;
         for (uint256 i; i < length; ) {
-            (bool success, bytes memory data) = paymentToken_.call(
-                abi.encodeWithSignature(
-                    "transferFrom(address, address, uint256)",
-                    __subscribers[paymentToken_][i].account,
-                    feeInfo.recipient,
-                    feeInfo.amount
+            (success[i], results[i]) = paymentToken_.call(
+                abi.encodeCall(
+                    IERC20.transferFrom,
+                    (
+                        __subscribers[paymentToken_][i].account,
+                        _feeInfo.recipient,
+                        _feeInfo.amount
+                    )
                 )
             );
-            successArr[i] = success;
-            result[i] = data;
+
+            // blacklist user if call failed
+            if (!success[i])
+                __subscribers[paymentToken_][i].isBlacklisted = true;
 
             unchecked {
                 ++i;
             }
         }
 
-        emit Claimed(owner(), successArr, result);
+        emit Claimed(_msgSender(), success, results);
     }
 
     function claimFees(ClaimInfo[] calldata claimInfo_) external onlyOwner {
-        if (getChainId() == storageChainId) {
+        if (block.chainid == storageChainId)
             revert SubscriptionManager__InvalidChain();
-        }
+
         uint256 length = claimInfo_.length;
-        bool[] memory successArr = new bool[](length);
-        bytes[] memory result = new bytes[](length);
+        bool[] memory success = new bool[](length);
+        bytes[] memory results = new bytes[](length);
+
+        FeeInfo memory _feeInfo = feeInfo;
         for (uint256 i; i < length; ) {
-            (bool success, bytes memory data) = claimInfo_[i].token.call(
-                abi.encodeWithSignature(
-                    "transferFrom(address, address, uint256)",
-                    claimInfo_[i].account,
-                    feeInfo.recipient,
-                    feeInfo.amount
+            (success[i], results[i]) = claimInfo_[i].token.call(
+                abi.encodeCall(
+                    IERC20.transferFrom,
+                    (claimInfo_[i].account, _feeInfo.recipient, _feeInfo.amount)
                 )
             );
-            successArr[i] = success;
-            result[i] = data;
 
             unchecked {
                 ++i;
             }
         }
 
-        emit Claimed(owner(), successArr, result);
-    }
-
-    function getChainId() private view returns (uint256 chainId) {
-        assembly {
-            chainId := chainid()
-        }
+        emit Claimed(_msgSender(), success, results);
     }
 
     function viewSubscribers(

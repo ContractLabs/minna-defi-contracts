@@ -2,9 +2,9 @@
 pragma solidity 0.8.19;
 
 interface ISubscriptionManager {
+    error SubscriptionManager__InvalidChain();
     error SubscriptionManager__Unauthorized(address caller);
     error SubscriptionManager__UnsupportedToken(address token);
-    error SubscriptionManager__InvalidChain();
 
     struct FeeToken {
         address token;
