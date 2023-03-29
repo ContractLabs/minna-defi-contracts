@@ -24,6 +24,7 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
 
     FeeInfo public feeInfo;
     IPermit2 public permit2;
+
     uint256 private __useStorage = 2;
 
     mapping(address => bool) private __isUsePermit2;
@@ -32,7 +33,7 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
 
     mapping(address => EnumerableSet.AddressSet) private __subscribers;
 
-    mapping(address => SubscriptionStatus) private __subscriptionStatues;
+    mapping(address => SubscriptionStatus) private __subscriptionStatuses;
 
     modifier whenUseStorage() {
         _checkUseStorage();
@@ -101,7 +102,7 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
 
         if (isUseStorage()) {
             __subscribers[token].add(account_);
-            __subscriptionStatues[account_].expiry = uint64(
+            __subscriptionStatuses[account_].expiry = uint64(
                 duration_ + block.timestamp
             );
         }
@@ -186,7 +187,7 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
             subscriber = subscribers.at(i);
 
             //  @dev skip fee charging
-            if (__subscriptionStatues[subscriber].expiry < block.timestamp)
+            if (__subscriptionStatuses[subscriber].expiry < block.timestamp)
                 continue;
 
             (success[i], results[i]) = _safeTransferFrom(
@@ -264,7 +265,7 @@ contract SubscriptionManager is ISubscriptionManager, Ownable {
     {
         uint256 length = subscribers_.length;
         for (uint256 i; i < length; ) {
-            statuses[i] = __subscriptionStatues[subscribers_[i]];
+            statuses[i] = __subscriptionStatuses[subscribers_[i]];
             unchecked {
                 ++i;
             }
