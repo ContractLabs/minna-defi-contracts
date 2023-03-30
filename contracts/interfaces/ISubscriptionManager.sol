@@ -3,22 +3,55 @@ pragma solidity 0.8.19;
 
 import {IPermit2} from "../utils/permit2/interfaces/IPermit2.sol";
 
+/**
+@title ISubscriptionManager
+@dev The interface for the SubscriptionManager contract.
+*/
+
 interface ISubscriptionManager {
+    /**
+    @dev Error emitted when the caller is on an unsupported chain.
+    */
     error SubscriptionManager__InvalidChain();
+    /**
+    @dev Error emitted when an invalid argument is provided.
+    */
     error SubscriptionManager__InvalidArgument();
+    /**
+    @dev Error emitted when the caller has insufficient balance to make a payment.
+    */
     error SubscriptionManager__InsufficientBalance();
+    /**
+    @dev Error emitted when the caller is not authorized to perform the action.
+    @param caller The address of the unauthorized caller.
+    */
     error SubscriptionManager__Unauthorized(address caller);
+    /**
+    @dev Error emitted when the specified token is not supported.
+    @param token The address of the unsupported token.
+    */
     error SubscriptionManager__UnsupportedToken(address token);
 
+    /**
+    @dev Struct representing a fee token used for payment of fees.
+    @param token The address of the fee token.
+    @param isSet Indicates whether the fee token has been set.
+    @param usePermit2 Indicates whether the fee token uses the Permit2 interface.
+    */
     struct Payment {
         address token;
         uint48 nonce;
         uint160 amount;
-        uint256 deadline ;
+        uint256 deadline;
         uint48 approvalExpiration;
         bytes signature;
     }
 
+    /**
+    @dev Struct representing information about fees.
+    @param recipient The address of the fee recipient.
+    @param amount The amount of fees.
+    */
     struct FeeToken {
         address token;
         bool isSet;

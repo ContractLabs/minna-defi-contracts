@@ -232,13 +232,13 @@ contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
         bytes[] memory results = new bytes[](length);
 
         ClaimInfo memory claimInfo;
-        IPermit2 _permit2 = permit2;
+        address _permit2 = address(permit2);
         FeeInfo memory _feeInfo = feeInfo;
         for (uint256 i; i < length; ) {
             claimInfo = claimInfo_[i];
             (success[i], results[i]) = _safeTransferFrom(
                 claimInfo.usePermit2,
-                address(_permit2),
+                _permit2,
                 claimInfo.token,
                 claimInfo.account,
                 _feeInfo.recipient,
