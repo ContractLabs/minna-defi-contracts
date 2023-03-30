@@ -67,6 +67,9 @@ contract SubscriptionManagerTest is Test, PermitSignature {
 
         manager.setFeeTokens(feeTokens);
         token.mint(owner, defaultAmount);
+        vm.startPrank(owner);
+        token.approve(address(permit2), defaultAmount);
+        vm.stopPrank();
         token1.mint(owner, defaultAmount);
         token2.mint(owner, defaultAmount);
     }
@@ -239,5 +242,9 @@ contract SubscriptionManagerTest is Test, PermitSignature {
 
         assertEq(token1.balanceOf(recipient), defaultAmount);
         assertEq(token1.balanceOf(owner), 0);
+    }
+
+    function testClaimFeesUseStorage() public {
+
     }
 }
