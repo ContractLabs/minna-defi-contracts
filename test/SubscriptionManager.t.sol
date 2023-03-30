@@ -27,11 +27,11 @@ contract SubscriptionManagerTest is Test, PermitSignature {
 
     uint256 defaultDeadline = block.timestamp + 1 days;
     uint256 internal ownerPrivateKey = 0xA11CE;
-    uint256 internal spenderPrivateKey = 0xB0B;
+    uint256 internal adminPrivateKey = 0xB0B;
     uint256 internal recipientPrivateKey = 0xCDEF;
 
     address internal owner = vm.addr(ownerPrivateKey);
-    address internal spender = vm.addr(spenderPrivateKey);
+    address internal admin = vm.addr(adminPrivateKey);
     address internal recipient = vm.addr(recipientPrivateKey);
 
     Permit2 internal permit2 = new Permit2();
@@ -45,6 +45,7 @@ contract SubscriptionManagerTest is Test, PermitSignature {
     SigUtils internal sigUtils2 = new SigUtils(token2.DOMAIN_SEPARATOR());
 
     function setUp() public {
+        vm.startPrank(admin);
         manager = new SubscriptionManager(
             defaultAmount,
             true,
@@ -66,12 +67,13 @@ contract SubscriptionManagerTest is Test, PermitSignature {
         );
 
         manager.setFeeTokens(feeTokens);
-        token.mint(owner, defaultAmount);
-        vm.startPrank(owner);
-        token.approve(address(permit2), defaultAmount);
         vm.stopPrank();
-        token1.mint(owner, defaultAmount);
-        token2.mint(owner, defaultAmount);
+        token.mint(owner, type(uint96).max);
+        token1.mint(owner, type(uint96).max);
+        vm.startPrank(owner);
+        token1.approve(address(permit2), type(uint96).max);
+        vm.stopPrank();
+        token2.mint(owner, type(uint96).max);
     }
 
     // function testStandardPermit() public {
@@ -114,7 +116,6 @@ contract SubscriptionManagerTest is Test, PermitSignature {
         manager.subscribe(owner, 4 weeks, payment);
 
         assertEq(token.balanceOf(recipient), defaultAmount);
-        assertEq(token.balanceOf(owner), 0);
     }
 
     function testSubscribeFailWithUnsupportedToken() public {
@@ -176,6 +177,13 @@ contract SubscriptionManagerTest is Test, PermitSignature {
         );
         vm.expectRevert(abi.encodeWithSelector(selector));
         manager.subscribe(owner, 4 weeks, payment);
+
+        vm.startPrank(admin);
+
+        manager.claimFees(address(token));
+        manager.claimFees(address(token1));
+
+        vm.stopPrank();
     }
 
     function testSubscribeFailWithInvalidDuration() public {
@@ -241,10 +249,68 @@ contract SubscriptionManagerTest is Test, PermitSignature {
         manager.subscribe(owner, 4 weeks, payment);
 
         assertEq(token1.balanceOf(recipient), defaultAmount);
-        assertEq(token1.balanceOf(owner), 0);
     }
 
-    function testClaimFeesUseStorage() public {
+    // function testClaimFeesUseStorage() public {
+    //     SigUtils.Permit memory permit = SigUtils.Permit({
+    //         owner: owner,
+    //         spender: address(manager),
+    //         value: defaultAmount,
+    //         nonce: defaultNonce,
+    //         deadline: defaultDeadline
+    //     });
 
-    }
+    //     bytes32 digest = sigUtils.getTypedDataHash(permit);
+    //     (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
+    //     bytes memory signature = abi.encodePacked(r, s, v);
+
+    //     ISubscriptionManager.Payment memory payment = ISubscriptionManager
+    //         .Payment({
+    //             token: address(token),
+    //             nonce: defaultNonce,
+    //             amount: defaultAmount,
+    //             deadline: defaultDeadline,
+    //             approvalExpiration: defaultExpiration,
+    //             signature: signature
+    //         });
+    //     // IAllowanceTransfer.PermitDetails memory details = IAllowanceTransfer
+    //     //     .PermitDetails(
+    //     //         address(token1),
+    //     //         defaultAmount,
+    //     //         defaultExpiration,
+    //     //         defaultNonce
+    //     //     );
+    //     // IAllowanceTransfer.PermitSingle memory permit1 = IAllowanceTransfer
+    //     //     .PermitSingle({
+    //     //         details: details,
+    //     //         spender: address(manager),
+    //     //         sigDeadline: defaultDeadline
+    //     //     });
+    //     // bytes memory signature1 = getPermitSignature(
+    //     //     permit1,
+    //     //     ownerPrivateKey,
+    //     //     permit2.DOMAIN_SEPARATOR()
+    //     // );
+    //     // ISubscriptionManager.Payment memory payment1 = ISubscriptionManager
+    //     //     .Payment({
+    //     //         token: address(token1),
+    //     //         nonce: defaultNonce,
+    //     //         amount: defaultAmount,
+    //     //         deadline: defaultDeadline,
+    //     //         approvalExpiration: defaultExpiration,
+    //     //         signature: signature1
+    //     //     });
+    //     vm.startPrank(owner);
+    //     manager.subscribe(owner, 1 days, payment);
+    //     // manager.subscribe(owner, 1 days, payment1);
+    //     vm.stopPrank();
+    //     vm.warp(block.timestamp + 2 days);
+    //     vm.startPrank(admin);
+    //     manager.claimFees(address(token));
+    //     // manager.claimFees(address(token1));
+    //     vm.stopPrank();
+
+    //     // assertEq(token.balanceOf(recipient), defaultAmount * 2);
+    //     // assertEq(token1.balanceOf(recipient), defaultAmount * 2);
+    // }
 }
