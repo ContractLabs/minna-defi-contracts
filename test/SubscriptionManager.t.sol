@@ -45,6 +45,9 @@ contract SubscriptionManagerTest is Test, PermitSignature {
     SigUtils internal sigUtils = new SigUtils(token.DOMAIN_SEPARATOR());
     SigUtils internal sigUtils2 = new SigUtils(token2.DOMAIN_SEPARATOR());
 
+    event Blacklisted(address indexed operator, address[] blacklisted);
+    event Claimed(address indexed operator, bool[] success, bytes[] results);
+
     function setUp() public {
         vm.startPrank(admin);
         manager = new SubscriptionManager(
@@ -267,6 +270,53 @@ contract SubscriptionManagerTest is Test, PermitSignature {
         vm.stopPrank();
 
         assertEq(token.balanceOf(recipient), defaultFee * 2);
+    }
+
+    function testClaimFeesBlacklistFail() public {
+        SigUtils.Permit memory permit = SigUtils.Permit({
+            owner: owner,
+            spender: address(manager),
+            value: defaultFee,
+            nonce: defaultNonce,
+            deadline: defaultDeadline
+        });
+
+        bytes32 digest = sigUtils.getTypedDataHash(permit);
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
+        bytes memory signature = abi.encodePacked(r, s, v);
+
+        ISubscriptionManager.Payment memory payment = ISubscriptionManager
+            .Payment({
+                token: address(token),
+                nonce: defaultNonce,
+                amount: defaultFee,
+                deadline: defaultDeadline,
+                approvalExpiration: defaultExpiration,
+                signature: signature
+            });
+
+        vm.startPrank(owner);
+        manager.subscribe(owner, 4 weeks, payment);
+        vm.stopPrank();
+
+        vm.warp(4 weeks + 1 seconds);
+
+        bool[] memory success = new bool[](1);
+        success[0] = false;
+        bytes[] memory result = new bytes[](1);
+        result[0] = "";
+
+        address[] memory blacklist = new address[](1);
+        blacklist[0] = owner;
+
+        vm.expectEmit(true, true, true, true);
+        vm.recordLogs();
+        emit Claimed(admin, success, result);
+        emit Blacklisted(admin, blacklist);
+
+        vm.startPrank(admin);
+        manager.claimFees(address(token));
+        vm.stopPrank();
     }
 
     function testClaimFeesUseStorageWithPermit2Success() public {
