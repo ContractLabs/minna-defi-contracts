@@ -272,7 +272,7 @@ contract SubscriptionManagerTest is Test, PermitSignature {
         assertEq(token.balanceOf(recipient), defaultFee * 2);
     }
 
-    function testClaimFeesBlacklistFail() public {
+    function testClaimFeesStandardPermitBlacklistFail() public {
         SigUtils.Permit memory permit = SigUtils.Permit({
             owner: owner,
             spender: address(manager),
@@ -301,17 +301,10 @@ contract SubscriptionManagerTest is Test, PermitSignature {
 
         vm.warp(4 weeks + 1 seconds);
 
-        bool[] memory success = new bool[](1);
-        success[0] = false;
-        bytes[] memory result = new bytes[](1);
-        result[0] = "";
-
         address[] memory blacklist = new address[](1);
         blacklist[0] = owner;
 
-        vm.expectEmit(true, true, true, true);
-        vm.recordLogs();
-        emit Claimed(admin, success, result);
+        vm.expectEmit(true, true, false, true);
         emit Blacklisted(admin, blacklist);
 
         vm.startPrank(admin);
@@ -357,5 +350,50 @@ contract SubscriptionManagerTest is Test, PermitSignature {
         vm.stopPrank();
 
         assertEq(token1.balanceOf(recipient), defaultFee * 2);
+    }
+
+    function testClaimFeesPermit2BlacklistFail() public {
+        IAllowanceTransfer.PermitDetails memory details = IAllowanceTransfer
+            .PermitDetails(
+                address(token1),
+                defaultFee,
+                defaultExpiration,
+                defaultNonce
+            );
+        IAllowanceTransfer.PermitSingle memory permit = IAllowanceTransfer
+            .PermitSingle({
+                details: details,
+                spender: address(manager),
+                sigDeadline: defaultDeadline
+            });
+        bytes memory signature = getPermitSignature(
+            permit,
+            ownerPrivateKey,
+            permit2.DOMAIN_SEPARATOR()
+        );
+        ISubscriptionManager.Payment memory payment = ISubscriptionManager
+            .Payment({
+                token: address(token1),
+                nonce: defaultNonce,
+                amount: defaultFee,
+                deadline: defaultDeadline,
+                approvalExpiration: defaultExpiration,
+                signature: signature
+            });
+        vm.startPrank(owner);
+        manager.subscribe(owner, 4 weeks, payment);
+        vm.stopPrank();
+
+        vm.warp(4 weeks + 1 seconds);
+
+        address[] memory blacklist = new address[](1);
+        blacklist[0] = owner;
+
+        vm.expectEmit(true, true, false, true);
+        emit Blacklisted(admin, blacklist);
+
+        vm.startPrank(admin);
+        manager.claimFees(address(token1));
+        vm.stopPrank();
     }
 }
