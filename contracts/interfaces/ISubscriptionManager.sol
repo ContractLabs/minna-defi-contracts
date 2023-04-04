@@ -29,7 +29,7 @@ interface ISubscriptionManager {
         address account;
     }
 
-    event Claimed(address indexed operator, bool[] success, bytes[] results);
+    event Claimed(address indexed operator, uint256[] success, bytes[] results);
 
     event NewFeeInfo(
         address indexed operator,
@@ -41,5 +41,5 @@ interface ISubscriptionManager {
 
     function claimFees(
         ClaimInfo[] calldata claimInfo_
-    ) external returns (bool[] memory success, bytes[] memory results);
+    ) external returns (uint256[] memory success, bytes[] memory results);
 }

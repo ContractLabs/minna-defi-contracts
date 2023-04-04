@@ -29,22 +29,31 @@ contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
     )
         external
         onlyOwner
-        returns (bool[] memory success, bytes[] memory results)
+        returns (uint256[] memory success, bytes[] memory results)
     {
         uint256 length = claimInfo_.length;
-        success = new bool[](length);
+        success = new uint256[](length);
         results = new bytes[](length);
 
-        ClaimInfo memory claimInfo;
         FeeInfo memory _feeInfo = feeInfo;
+
+        bytes memory callData = abi.encodeCall(
+            IERC20.transferFrom,
+            (address(0), _feeInfo.recipient, _feeInfo.amount)
+        );
+
+        address account;
+        bool ok;
         for (uint256 i; i < length; ) {
-            claimInfo = claimInfo_[i];
-            (success[i], results[i]) = claimInfo.token.call(
-                abi.encodeCall(
-                    IERC20.transferFrom,
-                    (claimInfo.account, _feeInfo.recipient, _feeInfo.amount)
-                )
-            );
+            account = claimInfo_[i].account;
+
+            assembly {
+                mstore(add(callData, 0x24), account)
+            }
+
+            (ok, results[i]) = claimInfo_[i].token.call(callData);
+
+            success[i] = ok ? 2 : 1;
 
             unchecked {
                 ++i;
