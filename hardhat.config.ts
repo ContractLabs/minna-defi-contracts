@@ -34,12 +34,21 @@ const config: HardhatUserConfig = {
     },
     etherscan: {
         apiKey: {
+            arbitrumGoerli: process.env.TARB_API_KEY || "",
             bsc: process.env.TBSC_API_KEY || "",
             bscTestnet: process.env.TBSC_API_KEY || "",
             goerli: process.env.ETH_API_KEY || "",
         },
     },
     networks: {
+        arbitrumGoerli: {
+            chainId: 421613,
+            url: "https://arbitrum-goerli.public.blastapi.io",
+            accounts:
+                process.env.PRIVATE_KEY !== undefined
+                    ? [process.env.PRIVATE_KEY]
+                    : [],
+        },
         bscTest: {
             url: "https://bsc-testnet.public.blastapi.io",
             chainId: 97,

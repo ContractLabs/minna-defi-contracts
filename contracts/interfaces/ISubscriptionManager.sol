@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
 
-import {IPermit2} from "../utils/permit2/interfaces/IPermit2.sol";
-
 /**
 @title ISubscriptionManager
 @dev The interface for the SubscriptionManager contract.
@@ -24,10 +22,11 @@ interface ISubscriptionManager {
         uint96 amount;
     }
 
-    struct ClaimInfo {
-        address token;
-        address account;
-    }
+    event NewPayment(
+        address indexed operator,
+        address indexed from,
+        address indexed to
+    );
 
     event Claimed(address indexed operator, uint256[] success, bytes[] results);
 
@@ -37,9 +36,11 @@ interface ISubscriptionManager {
         FeeInfo indexed newFeeInfo
     );
 
+    function setPayment(address payment_) external;
+
     function setFeeInfo(address recipient_, uint96 amount_) external;
 
     function claimFees(
-        ClaimInfo[] calldata claimInfo_
+        address[] calldata accounts_
     ) external returns (uint256[] memory success, bytes[] memory results);
 }

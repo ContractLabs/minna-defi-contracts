@@ -11,8 +11,19 @@ import {ISubscriptionManager} from "./interfaces/ISubscriptionManager.sol";
 contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
     FeeInfo public feeInfo;
 
-    constructor(uint96 amount_, address recipient_) payable Ownable() {
+    address public payment;
+
+    constructor(
+        address payment_,
+        uint96 amount_,
+        address recipient_
+    ) payable Ownable() {
+        _setPayment(_msgSender(), payment_);
         _setFeeInfo(recipient_, amount_, feeInfo);
+    }
+
+    function setPayment(address payment_) external onlyOwner {
+        _setPayment(_msgSender(), payment_);
     }
 
     function setFeeInfo(address recipient_, uint96 amount_) external {
@@ -25,15 +36,15 @@ contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
     }
 
     function claimFees(
-        ClaimInfo[] calldata claimInfo_
+        address[] calldata accounts_
     )
         external
         onlyOwner
         returns (uint256[] memory success, bytes[] memory results)
     {
-        uint256 length = claimInfo_.length;
-        success = new uint256[](length);
+        uint256 length = accounts_.length;
         results = new bytes[](length);
+        success = new uint256[](length);
 
         FeeInfo memory _feeInfo = feeInfo;
 
@@ -42,16 +53,17 @@ contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
             (address(0), _feeInfo.recipient, _feeInfo.amount)
         );
 
-        address account;
+        address _payment = payment;
         bool ok;
+        address account;
         for (uint256 i; i < length; ) {
-            account = claimInfo_[i].account;
+            account = accounts_[i];
 
             assembly {
                 mstore(add(callData, 0x24), account)
             }
 
-            (ok, results[i]) = claimInfo_[i].token.call(callData);
+            (ok, results[i]) = _payment.call(callData);
 
             success[i] = ok ? 2 : 1;
 
@@ -61,6 +73,11 @@ contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
         }
 
         emit Claimed(_msgSender(), success, results);
+    }
+
+    function _setPayment(address sender_, address payment_) internal {
+        emit NewPayment(sender_, payment, payment_);
+        payment = payment_;
     }
 
     function _setFeeInfo(
