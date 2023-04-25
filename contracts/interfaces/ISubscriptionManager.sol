@@ -22,6 +22,11 @@ interface ISubscriptionManager {
         uint96 amount;
     }
 
+    struct Affiliate {
+        address account;
+        uint96 refferedAmount;
+    }
+
     event NewPayment(
         address indexed operator,
         address indexed from,
@@ -34,6 +39,12 @@ interface ISubscriptionManager {
         address indexed operator,
         FeeInfo indexed oldFeeInfo,
         FeeInfo indexed newFeeInfo
+    );
+
+    event CommissionFeeUpdated(
+        address indexed operator,
+        uint96 indexed oldCommissionFee_,
+        uint96 indexed newCommissionFee_
     );
 
     function setPayment(address payment_) external;
