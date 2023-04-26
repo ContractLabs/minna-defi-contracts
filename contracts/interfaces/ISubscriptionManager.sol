@@ -7,6 +7,7 @@ pragma solidity 0.8.19;
 */
 
 interface ISubscriptionManager {
+    error SubscriptionManager__Unclaimed();
     /**
     @dev Error emitted when an invalid argument is provided.
     */
@@ -21,6 +22,13 @@ interface ISubscriptionManager {
         address recipient;
         uint96 amount;
     }
+
+    struct Bonus {
+        address recipient;
+        uint256 bonus;
+    }
+
+    event Distributed(address indexed operator, uint256[] success, bytes[] results);
 
     event NewPayment(
         address indexed operator,

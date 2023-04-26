@@ -35,10 +35,56 @@ contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
         _setFeeInfo(recipient_, amount_, _feeInfo);
     }
 
+    function distributeBonuses(
+        Bonus[] calldata bonuses
+    )
+        public
+        onlyOwner
+        returns (uint256[] memory success, bytes[] memory results)
+    {
+        uint256 length = bonuses.length;
+        success = new uint256[](length);
+        results = new bytes[](length);
+
+        bytes memory callData = abi.encodeCall(
+            IERC20.transfer,
+            (address(0), 0)
+        );
+        address _payment = payment;
+
+        bool ok;
+        address recipient;
+        uint256 bonus;
+
+        for (uint256 i; i < length; ) {
+            bonus = bonuses[i].bonus;
+            recipient = bonuses[i].recipient;
+            assembly {
+                mstore(add(callData, 0x24), recipient)
+                mstore(add(callData, 0x44), bonus)
+            }
+
+            (ok, results[i]) = _payment.call(callData);
+
+            success[i] = ok ? 2 : 1;
+
+            unchecked {
+                ++i;
+            }
+        }
+
+        IERC20(_payment).transfer(
+            feeInfo.recipient,
+            IERC20(_payment).balanceOf(address(this))
+        );
+
+        emit Distributed(_msgSender(), success, results);
+    }
+
     function claimFees(
         address[] calldata accounts_
     )
-        external
+        public
         onlyOwner
         returns (uint256[] memory success, bytes[] memory results)
     {
@@ -50,7 +96,7 @@ contract SubscriptionManager is Ownable, FundRecoverable, ISubscriptionManager {
 
         bytes memory callData = abi.encodeCall(
             IERC20.transferFrom,
-            (address(0), _feeInfo.recipient, _feeInfo.amount)
+            (address(0), address(this), _feeInfo.amount)
         );
 
         address _payment = payment;
