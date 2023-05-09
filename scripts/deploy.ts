@@ -31,21 +31,27 @@ const deployAndVerify = async (
 };
 
 async function main() {
-    const pmt = await deployAndVerify(
-        "USDC",
-        [],
-        true,
-        "contracts/USDC.sol:USDC",
-    );
+    // const pmt = await deployAndVerify(
+    //     "USDC",
+    //     [],
+    //     true,
+    //     "contracts/USDC.sol:USDC",
+    // );
 
     const subscriptionManager = await deployAndVerify(
         "SubscriptionManager",
         [
-            pmt.address,
+            "0xa6Eb9c9ba8F77c6D8534203f620953c71dA36407",
             ethers.utils.parseEther("30"),
-            "0x3F579e98e794B870aF2E53115DC8F9C4B2A1bDA6",
+            "0x58f5663cCb305366F584b5f4dF523728D5479396",
         ],
         true,
+        "contracts/SubscriptionManager.sol:SubscriptionManager",
+        {
+            kind: "uups",
+            initializer: "initialize",
+            unsafeAllow: ["delegatecall"],
+        }
     );
 }
 

@@ -7,7 +7,7 @@ pragma solidity 0.8.19;
 */
 
 interface ISubscriptionManager {
-    error SubscriptionManager__Unclaimed();
+    error SubscriptionManager__InsufficientAmount();
     /**
     @dev Error emitted when an invalid argument is provided.
     */
@@ -28,7 +28,16 @@ interface ISubscriptionManager {
         uint256 bonus;
     }
 
-    event Distributed(address indexed operator, uint256[] success, bytes[] results);
+    struct Claim {
+        address from;
+        uint256 discountPercentage;
+    }
+
+    event Distributed(
+        address indexed operator,
+        uint256[] success,
+        bytes[] results
+    );
 
     event NewPayment(
         address indexed operator,
@@ -48,7 +57,15 @@ interface ISubscriptionManager {
 
     function setFeeInfo(address recipient_, uint96 amount_) external;
 
+    function distributeBonuses(
+        Bonus[] calldata bonuses_
+    ) external returns (uint256[] memory success, bytes[] memory results);
+
     function claimFees(
         address[] calldata accounts_
+    ) external returns (uint256[] memory success, bytes[] memory results);
+
+    function claimFees(
+        Claim[] calldata claims_
     ) external returns (uint256[] memory success, bytes[] memory results);
 }
