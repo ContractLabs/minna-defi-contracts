@@ -38,6 +38,7 @@ const config: HardhatUserConfig = {
             bsc: process.env.TBSC_API_KEY || "",
             bscTestnet: process.env.TBSC_API_KEY || "",
             goerli: process.env.ETH_API_KEY || "",
+            avalancheFujiTestnet: process.env.AVA_API_KEY || "",
         },
     },
     networks: {
@@ -50,7 +51,7 @@ const config: HardhatUserConfig = {
                     : [],
         },
         bscTest: {
-            url: "https://bsc-testnet.public.blastapi.io",
+            url: "https://data-seed-prebsc-1-s2.binance.org:8545",
             chainId: 97,
             accounts:
                 process.env.PRIVATE_KEY !== undefined
@@ -81,6 +82,22 @@ const config: HardhatUserConfig = {
                     ? [process.env.PRIVATE_KEY]
                     : [],
         },
+        fujiTest: {
+            url: "https://ava-testnet.public.blastapi.io/ext/bc/C/rpc",
+            chainId: 43113,
+            accounts:
+                process.env.PRIVATE_KEY !== undefined
+                    ? [process.env.PRIVATE_KEY]
+                    : []
+        },
+        fuji: {
+            url: "https://avalanche-c-chain.publicnode.com",
+            chainId: 43114,
+            accounts:
+                process.env.PRIVATE_KEY !== undefined
+                    ? [process.env.PRIVATE_KEY]
+                    : []
+        }
     },
     contractSizer: {
         alphaSort: true,

@@ -1,19 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.19;
-
+import {Roles} from "./libraries/Roles.sol";
 import {
-    OwnableUpgradeable
-} from "oz-custom/contracts/oz-upgradeable/access/OwnableUpgradeable.sol";
-
+    FundRecoverableUpgradeable
+} from "./internal-upgradeable/FundRecoverableUpgradeable.sol";
+import {IERC20} from "./utils/permit2/interfaces/IPermit2.sol";
+import {ISubscriptionManager} from "./interfaces/ISubscriptionManager.sol";
 import {
     UUPSUpgradeable
 } from "oz-custom/contracts/oz-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {
-    FundRecoverableUpgradeable
-} from "./internal-upgradeable/FundRecoverableUpgradeable.sol";
+    AccessControlUpgradeable
+} from "oz-custom/contracts/oz-upgradeable/access/AccessControlUpgradeable.sol";
 
-import {IERC20} from "./utils/permit2/interfaces/IPermit2.sol";
-import {ISubscriptionManager} from "./interfaces/ISubscriptionManager.sol";
 
 //* 0x5eec0d45
 //* 00000000000000000000000047b0fb7281206373f8672fcafed0c6afc6516b32 // from
@@ -22,8 +21,8 @@ import {ISubscriptionManager} from "./interfaces/ISubscriptionManager.sol";
 
 contract SubscriptionManager is
     UUPSUpgradeable,
-    OwnableUpgradeable,
     ISubscriptionManager,
+    AccessControlUpgradeable,
     FundRecoverableUpgradeable
 {
     FeeInfo public feeInfo;
@@ -34,21 +33,26 @@ contract SubscriptionManager is
         uint96 amount_,
         address recipient_
     ) external initializer {
-        __Ownable_init_unchained();
-        _setPayment(_msgSender(), payment_);
-        _setFeeInfo(recipient_, amount_, feeInfo);
-    }
-
-    function setPayment(address payment_) external onlyOwner {
-        _setPayment(_msgSender(), payment_);
-    }
-
-    function setFeeInfo(address recipient_, uint96 amount_) external {
-        FeeInfo memory _feeInfo = feeInfo;
         address sender = _msgSender();
-        if (sender != _feeInfo.recipient)
-            revert SubscriptionManager__Unauthorized(sender);
+        _setPayment(sender, payment_);
+        _setFeeInfo(recipient_, amount_, feeInfo);
 
+        _grantRole(Roles.OPERATOR_ROLE, sender);
+
+        _grantRole(Roles.OPERATOR_ROLE, recipient_);
+        _grantRole(Roles.UPGRADER_ROLE, recipient_);
+        _grantRole(Roles.TREASURER_ROLE, recipient_);
+        _grantRole(DEFAULT_ADMIN_ROLE,  recipient_);
+
+        _grantRole(Roles.PROXY_ROLE, address(this));
+    }   
+
+    function setPayment(address payment_) external onlyRole(Roles.TREASURER_ROLE) {
+        _setPayment(_msgSender(), payment_);
+    }
+
+    function setFeeInfo(address recipient_, uint96 amount_) external onlyRole(Roles.TREASURER_ROLE) {
+        FeeInfo memory _feeInfo = feeInfo;
         _setFeeInfo(recipient_, amount_, _feeInfo);
     }
 
@@ -56,7 +60,7 @@ contract SubscriptionManager is
         Bonus[] calldata bonuses
     )
         public
-        onlyOwner
+        onlyRole(Roles.TREASURER_ROLE) 
         returns (uint256[] memory success, bytes[] memory results)
     {
         uint256 length = bonuses.length;
@@ -97,7 +101,7 @@ contract SubscriptionManager is
         address[] calldata accounts_
     )
         public
-        onlyOwner
+        onlyRole(Roles.OPERATOR_ROLE) 
         returns (uint256[] memory success, bytes[] memory results)
     {
         uint256 length = accounts_.length;
@@ -137,7 +141,7 @@ contract SubscriptionManager is
         Claim[] calldata claims_
     )
         external
-        onlyOwner
+        onlyRole(Roles.OPERATOR_ROLE)
         returns (uint256[] memory success, bytes[] memory results)
     {
         uint256 length = claims_.length;
@@ -177,13 +181,9 @@ contract SubscriptionManager is
         emit Claimed(_msgSender(), success, results);
     }
 
-    function withdraw(uint256 amount_) public {
+    function withdraw(uint256 amount_) public onlyRole(Roles.TREASURER_ROLE) {
         FeeInfo memory _feeInfo = feeInfo;
-        address sender = _msgSender();
         address _payment = payment;
-
-        if (sender != _feeInfo.recipient)
-            revert SubscriptionManager__Unauthorized(sender);
 
         if (amount_ > IERC20(_payment).balanceOf(address(this)))
             revert SubscriptionManager__InsufficientAmount();
@@ -200,7 +200,7 @@ contract SubscriptionManager is
         address recipient_,
         uint96 amount_,
         FeeInfo memory currentFeeInfo_
-    ) internal {
+    ) internal onlyRole(Roles.PROXY_ROLE) {
         if (recipient_ == address(0))
             revert SubscriptionManager__InvalidArgument();
 
@@ -211,7 +211,7 @@ contract SubscriptionManager is
     }
 
     function _beforeRecover(bytes memory) internal view override {
-        _checkOwner(_msgSender());
+        _checkRole(DEFAULT_ADMIN_ROLE, _msgSender());
     }
 
     function _authorizeUpgrade(

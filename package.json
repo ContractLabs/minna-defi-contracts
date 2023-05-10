@@ -9,6 +9,7 @@
         "deploy:arbTest": "hardhat run --network arbitrumGoerli scripts/deploy.ts",
         "deploy:bscTest": "hardhat run --network bscTest scripts/deploy.ts",
         "deploy:bsc": "hardhat run --network bsc scripts/deploy.ts",
+        "deploy:fujiTest": "hardhat run --network fujiTest scripts/deploy.ts",
         "deploy:goerli": "hardhat run --network goerli scripts/deploy.ts",
         "deploy:tomoTest": "hardhat run --network tomoTest scripts/deploy.ts",
         "upgrade:bscTest": "hardhat run --network bscTest scripts/upgrade.ts",
