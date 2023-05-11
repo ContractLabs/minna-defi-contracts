@@ -11,679 +11,174 @@ import {
     ISubscriptionManager,
     SubscriptionManager
 } from "contracts/SubscriptionManager.sol";
-import {PermitSignature} from "./utils/PermitSignature.sol";
-import {Permit2} from "contracts/utils/permit2/Permit2.sol";
-import {IPermit2} from "contracts/utils/permit2/interfaces/IPermit2.sol";
-import {
-    IAllowanceTransfer
-} from "contracts/utils/permit2/interfaces/IAllowanceTransfer.sol";
 
-contract SubscriptionManagerTest is Test, PermitSignature {
-    uint32 dirtyNonce = 1;
-    uint48 defaultNonce = 0;
-    uint48 defaultExpiration = uint48(block.timestamp + 4 weeks);
-    uint96 defaultAmount = 1e18;
-    uint96 defaultFee = 100;
+contract SubscriptionManagerTest is Test {
+    bytes32 public constant OPERATOR_ROLE =
+        0x97667070c54ef182b0f5858b034beac1b6f3089aa2d3188bb1e8929f4fa9b929;
+    bytes32 public constant UPGRADER_ROLE =
+        0x189ab7a9244df0848122154315af71fe140f3db0fe014031783b0946b8c9d2e3;
+    bytes32 public constant TREASURER_ROLE =
+        0x3496e2e73c4d42b75d702e60d9e48102720b8691234415963a5a857b86425d07;
+
+    uint96 defaultFee = 50;
+    uint96 defaultAmount = 1000;
     uint96 insufficientBalance = 10;
 
-    uint256 defaultDeadline = block.timestamp + 1 days;
-    uint256 internal ownerPrivateKey = 0xA11CE;
-    uint256 internal adminPrivateKey = 0xB0B;
-    uint256 internal recipientPrivateKey = 0xCDEF;
+    address internal bob = vm.addr(0x1);
+    address internal alice = vm.addr(0x2);
+    address internal operator = vm.addr(0x3);
+    address internal upgrader = vm.addr(0x4);
+    address internal recipient = vm.addr(0x5);
 
-    address internal owner = vm.addr(ownerPrivateKey);
-    address internal admin = vm.addr(adminPrivateKey);
-    address internal recipient = vm.addr(recipientPrivateKey);
 
-    Permit2 internal permit2 = new Permit2();
     MockERC20 internal token = new MockERC20();
-    MockERC20 internal token1 = new MockERC20();
-    MockERC20 internal unsupportedToken = new MockERC20();
 
     SubscriptionManager internal manager;
 
-    SigUtils internal sigUtils = new SigUtils(token.DOMAIN_SEPARATOR());
-    SigUtils internal sigUtilsUnsupportedToken =
-        new SigUtils(unsupportedToken.DOMAIN_SEPARATOR());
+    event Distributed(
+        address indexed operator,
+        uint256[] success,
+        bytes[] results
+    );
 
-    event Blacklisted(address indexed operator, address[] blacklisted);
-    event Claimed(address indexed operator, bool[] success, bytes[] results);
+    event NewPayment(
+        address indexed operator,
+        address indexed from,
+        address indexed to
+    );
+
+    event Claimed(address indexed operator, uint256[] success, bytes[] results);
+
+    event NewFeeInfo(
+        address indexed operator,
+        ISubscriptionManager.FeeInfo indexed oldFeeInfo,
+        ISubscriptionManager.FeeInfo indexed newFeeInfo
+    );
 
     function setUp() public {
-        vm.startPrank(admin);
-        manager = new SubscriptionManager(
+        vm.startPrank(upgrader);
+        manager = new SubscriptionManager();
+        manager.initialize(
+            operator,
+            address(token),
             defaultFee,
-            true,
-            IPermit2(address(permit2)),
             recipient
         );
-
-        ISubscriptionManager.FeeToken[]
-            memory feeTokens = new ISubscriptionManager.FeeToken[](2);
-        feeTokens[0] = ISubscriptionManager.FeeToken(
-            address(token),
-            true,
-            false
-        );
-        feeTokens[1] = ISubscriptionManager.FeeToken(
-            address(token1),
-            true,
-            true
-        );
-
-        manager.setFeeTokens(feeTokens);
         vm.stopPrank();
-        token.mint(owner, defaultAmount);
-        token1.mint(owner, defaultAmount);
-        unsupportedToken.mint(owner, defaultAmount);
-        vm.startPrank(owner);
-        token1.approve(address(permit2), defaultAmount);
+
+        token.mint(address(manager), defaultAmount);
+        token.mint(bob, defaultAmount);
+        token.mint(alice, defaultAmount);
+
+        vm.startPrank(bob);
+        token.approve(address(manager), defaultAmount);
+        vm.stopPrank();
+
+        vm.startPrank(alice);
+        token.approve(address(manager), insufficientBalance);
         vm.stopPrank();
     }
 
-    function testSubscribeSuccessWithPermit() public {
-        SigUtils.Permit memory permit = SigUtils.Permit({
-            owner: owner,
-            spender: address(manager),
-            value: defaultAmount,
-            nonce: defaultNonce,
-            deadline: defaultDeadline
-        });
-
-        bytes32 digest = sigUtils.getTypedDataHash(permit);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
-
-        ISubscriptionManager.Payment memory payment = ISubscriptionManager
-            .Payment({
-                token: address(token),
-                nonce: defaultNonce,
-                amount: defaultAmount,
-                deadline: defaultDeadline,
-                approvalExpiration: defaultExpiration,
-                signature: signature
-            });
-        manager.subscribe(owner, 4 weeks, payment);
-
-        assertEq(token.balanceOf(recipient), defaultFee);
-    }
-
-    function testSubscribeFailWithUnsupportedToken() public {
-        SigUtils.Permit memory permit = SigUtils.Permit({
-            owner: owner,
-            spender: address(manager),
-            value: defaultAmount,
-            nonce: defaultNonce,
-            deadline: defaultDeadline
-        });
-
-        bytes32 digest = sigUtilsUnsupportedToken.getTypedDataHash(permit);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
-
-        ISubscriptionManager.Payment memory payment = ISubscriptionManager
-            .Payment({
-                token: address(unsupportedToken),
-                nonce: defaultNonce,
-                amount: defaultAmount,
-                deadline: defaultDeadline,
-                approvalExpiration: defaultExpiration,
-                signature: signature
-            });
-
-        bytes4 selector = bytes4(
-            keccak256("SubscriptionManager__UnsupportedToken(address)")
-        );
-        vm.expectRevert(
-            abi.encodeWithSelector(selector, address(unsupportedToken))
+    function testSetFeeSuccess() public {
+        ISubscriptionManager.FeeInfo memory _feeInfo = ISubscriptionManager.FeeInfo(
+            recipient,
+            defaultFee
         );
 
-        manager.subscribe(owner, 4 weeks, payment);
-    }
-
-    function testSubscribeFailWithInsufficientBalance() public {
-        SigUtils.Permit memory permit = SigUtils.Permit({
-            owner: owner,
-            spender: address(manager),
-            value: insufficientBalance,
-            nonce: defaultNonce,
-            deadline: defaultDeadline
-        });
-
-        bytes32 digest = sigUtils.getTypedDataHash(permit);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
-
-        ISubscriptionManager.Payment memory payment = ISubscriptionManager
-            .Payment({
-                token: address(token),
-                nonce: defaultNonce,
-                amount: insufficientBalance,
-                deadline: defaultDeadline,
-                approvalExpiration: defaultExpiration,
-                signature: signature
-            });
-
-        bytes4 selector = bytes4(
-            keccak256("SubscriptionManager__InsufficientBalance()")
+        ISubscriptionManager.FeeInfo memory feeInfo_ = ISubscriptionManager.FeeInfo(
+            recipient,
+            30
         );
-        vm.expectRevert(abi.encodeWithSelector(selector));
-        manager.subscribe(owner, 4 weeks, payment);
-
-        vm.startPrank(admin);
-        manager.claimFees(address(token));
-        manager.claimFees(address(token1));
-        vm.stopPrank();
-    }
-
-    // function testSubscribeStandardPermitFailWithInvalidDuration() public {
-    //     SigUtils.Permit memory permit = SigUtils.Permit({
-    //         owner: owner,
-    //         spender: address(manager),
-    //         value: defaultAmount,
-    //         nonce: defaultNonce,
-    //         deadline: defaultDeadline
-    //     });
-
-    //     bytes32 digest = sigUtils.getTypedDataHash(permit);
-    //     (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
-    //     bytes memory signature = abi.encodePacked(r, s, v);
-
-    //     ISubscriptionManager.Payment memory payment = ISubscriptionManager
-    //         .Payment({
-    //             token: address(token),
-    //             nonce: defaultNonce,
-    //             amount: defaultAmount,
-    //             deadline: defaultDeadline,
-    //             approvalExpiration: defaultExpiration,
-    //             signature: signature
-    //         });
-
-    //     bytes4 selector = bytes4(
-    //         keccak256("SubscriptionManager__InsufficientBalance()")
-    //     );
-    //     vm.expectRevert(abi.encodeWithSelector(selector));
-    //     manager.subscribe(owner, uint64(block.timestamp), payment);
-    // }
-
-    function testSubscribeSuccessWithPermit2() public {
-        IAllowanceTransfer.PermitDetails memory details = IAllowanceTransfer
-            .PermitDetails(
-                address(token1),
-                defaultAmount,
-                defaultExpiration,
-                defaultNonce
-            );
-        IAllowanceTransfer.PermitSingle memory permit = IAllowanceTransfer
-            .PermitSingle({
-                details: details,
-                spender: address(manager),
-                sigDeadline: defaultDeadline
-            });
-        bytes memory signature = getPermitSignature(
-            permit,
-            ownerPrivateKey,
-            permit2.DOMAIN_SEPARATOR()
-        );
-        ISubscriptionManager.Payment memory payment = ISubscriptionManager
-            .Payment({
-                token: address(token1),
-                nonce: defaultNonce,
-                amount: defaultAmount,
-                deadline: defaultDeadline,
-                approvalExpiration: defaultExpiration,
-                signature: signature
-            });
-
-        manager.subscribe(owner, 4 weeks, payment);
-
-        assertEq(token1.balanceOf(recipient), defaultFee);
-    }
-
-    function testClaimFeesUseStorageWithStandardPermitSuccess() public {
-        SigUtils.Permit memory permit = SigUtils.Permit({
-            owner: owner,
-            spender: address(manager),
-            value: defaultAmount,
-            nonce: defaultNonce,
-            deadline: defaultDeadline
-        });
-
-        bytes32 digest = sigUtils.getTypedDataHash(permit);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
-
-        ISubscriptionManager.Payment memory payment = ISubscriptionManager
-            .Payment({
-                token: address(token),
-                nonce: defaultNonce,
-                amount: defaultAmount,
-                deadline: defaultDeadline,
-                approvalExpiration: defaultExpiration,
-                signature: signature
-            });
-
-        vm.startPrank(owner);
-        manager.subscribe(owner, 4 weeks, payment);
-        vm.stopPrank();
-
-        vm.warp(4 weeks + 1 seconds);
-        vm.startPrank(admin);
-        manager.claimFees(address(token));
-        vm.stopPrank();
-
-        assertEq(token.balanceOf(recipient), defaultFee * 2);
-    }
-
-    function testClaimFeesStandardPermitBlacklistFail() public {
-        SigUtils.Permit memory permit = SigUtils.Permit({
-            owner: owner,
-            spender: address(manager),
-            value: defaultFee,
-            nonce: defaultNonce,
-            deadline: defaultDeadline
-        });
-
-        bytes32 digest = sigUtils.getTypedDataHash(permit);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
-
-        ISubscriptionManager.Payment memory payment = ISubscriptionManager
-            .Payment({
-                token: address(token),
-                nonce: defaultNonce,
-                amount: defaultFee,
-                deadline: defaultDeadline,
-                approvalExpiration: defaultExpiration,
-                signature: signature
-            });
-
-        vm.startPrank(owner);
-        manager.subscribe(owner, 4 weeks, payment);
-        vm.stopPrank();
-
-        vm.warp(4 weeks + 1 seconds);
-
-        address[] memory blacklist = new address[](1);
-        blacklist[0] = owner;
 
         vm.expectEmit(true, true, false, true);
-        emit Blacklisted(admin, blacklist);
+        emit NewFeeInfo(recipient, _feeInfo, feeInfo_);
 
-        vm.startPrank(admin);
-        manager.claimFees(address(token));
+        vm.startPrank(recipient);
+        manager.setFeeInfo(recipient, 30);
         vm.stopPrank();
+    } 
+
+    function testSetFeeFailUnauthorized() public {
+        bytes4 selector = bytes4(
+            keccak256("AccessControl__RoleMissing(bytes32,address)")
+        );
+        vm.expectRevert(abi.encodeWithSelector(selector, TREASURER_ROLE, bob));
+
+        vm.startPrank(bob);
+        manager.setFeeInfo(bob, 30);
+        vm.stopPrank();
+    } 
+
+    function testClaimOperator() public {
+        address[] memory addresses = new address[](2);
+        addresses[0] = bob;
+        addresses[1] = alice;
+
+        vm.startPrank(operator);
+        manager.claimFees(addresses);
+        vm.stopPrank();
+
+        assertEq(token.balanceOf(address(manager)), defaultAmount + defaultFee);
+        assertEq(token.balanceOf(bob), defaultAmount - defaultFee);
+        assertEq(token.balanceOf(alice), defaultAmount);
+
     }
 
-    function testClaimFeesUseStorageWithPermit2Success() public {
-        IAllowanceTransfer.PermitDetails memory details = IAllowanceTransfer
-            .PermitDetails(
-                address(token1),
-                defaultAmount,
-                defaultExpiration,
-                defaultNonce
-            );
-        IAllowanceTransfer.PermitSingle memory permit = IAllowanceTransfer
-            .PermitSingle({
-                details: details,
-                spender: address(manager),
-                sigDeadline: defaultDeadline
-            });
-        bytes memory signature = getPermitSignature(
-            permit,
-            ownerPrivateKey,
-            permit2.DOMAIN_SEPARATOR()
-        );
-        ISubscriptionManager.Payment memory payment = ISubscriptionManager
-            .Payment({
-                token: address(token1),
-                nonce: defaultNonce,
-                amount: defaultAmount,
-                deadline: defaultDeadline,
-                approvalExpiration: defaultExpiration,
-                signature: signature
-            });
-        vm.startPrank(owner);
-        manager.subscribe(owner, 4 weeks, payment);
+    function testClaimRecipient() public {
+        address[] memory addresses = new address[](2);
+        addresses[0] = bob;
+        addresses[1] = alice;
+
+        vm.startPrank(recipient);
+        manager.claimFees(addresses);
         vm.stopPrank();
 
-        vm.warp(4 weeks + 1 seconds);
-        vm.startPrank(admin);
-        manager.claimFees(address(token1));
-        vm.stopPrank();
-
-        assertEq(token1.balanceOf(recipient), defaultFee * 2);
+        assertEq(token.balanceOf(address(manager)), defaultAmount + defaultFee);
+        assertEq(token.balanceOf(bob), defaultAmount - defaultFee);
+        assertEq(token.balanceOf(alice), defaultAmount);
     }
 
-    function testClaimFeesPermit2BlacklistFail() public {
-        IAllowanceTransfer.PermitDetails memory details = IAllowanceTransfer
-            .PermitDetails(
-                address(token1),
-                defaultFee,
-                defaultExpiration,
-                defaultNonce
-            );
-        IAllowanceTransfer.PermitSingle memory permit = IAllowanceTransfer
-            .PermitSingle({
-                details: details,
-                spender: address(manager),
-                sigDeadline: defaultDeadline
-            });
-        bytes memory signature = getPermitSignature(
-            permit,
-            ownerPrivateKey,
-            permit2.DOMAIN_SEPARATOR()
-        );
-        ISubscriptionManager.Payment memory payment = ISubscriptionManager
-            .Payment({
-                token: address(token1),
-                nonce: defaultNonce,
-                amount: defaultFee,
-                deadline: defaultDeadline,
-                approvalExpiration: defaultExpiration,
-                signature: signature
-            });
-        vm.startPrank(owner);
-        manager.subscribe(owner, 4 weeks, payment);
-        vm.stopPrank();
-
-        vm.warp(4 weeks + 1 seconds);
-
-        address[] memory blacklist = new address[](1);
-        blacklist[0] = owner;
-
-        vm.expectEmit(true, true, false, true);
-        emit Blacklisted(admin, blacklist);
-
-        vm.startPrank(admin);
-        manager.claimFees(address(token1));
-        vm.stopPrank();
-    }
-
-    function testClaimFeesWithDifferentChainStandardPermitSuccess() public {
-        vm.startPrank(admin);
-        manager.toggleUseStorage();
-        vm.stopPrank();
-
-        SigUtils.Permit memory permit = SigUtils.Permit({
-            owner: owner,
-            spender: address(manager),
-            value: defaultAmount,
-            nonce: defaultNonce,
-            deadline: defaultDeadline
-        });
-
-        bytes32 digest = sigUtils.getTypedDataHash(permit);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
-
-        ISubscriptionManager.Payment memory payment = ISubscriptionManager
-            .Payment({
-                token: address(token),
-                nonce: defaultNonce,
-                amount: defaultAmount,
-                deadline: defaultDeadline,
-                approvalExpiration: defaultExpiration,
-                signature: signature
-            });
-
-        vm.startPrank(owner);
-        manager.subscribe(owner, 4 weeks, payment);
-        vm.stopPrank();
-
-        vm.warp(4 weeks + 1 seconds);
-        ISubscriptionManager.ClaimInfo[]
-            memory claimInfos = new ISubscriptionManager.ClaimInfo[](1);
-        claimInfos[0] = ISubscriptionManager.ClaimInfo(
-            false,
-            address(token),
-            owner
-        );
-        vm.startPrank(admin);
-        manager.claimFees(claimInfos);
-        vm.stopPrank();
-
-        assertEq(token.balanceOf(recipient), defaultFee * 2);
-    }
-
-    function testClaimFeesWithDifferentChainPermit2Success() public {
-        vm.startPrank(admin);
-        manager.toggleUseStorage();
-        vm.stopPrank();
-
-        IAllowanceTransfer.PermitDetails memory details = IAllowanceTransfer
-            .PermitDetails(
-                address(token1),
-                defaultAmount,
-                defaultExpiration,
-                defaultNonce
-            );
-        IAllowanceTransfer.PermitSingle memory permit = IAllowanceTransfer
-            .PermitSingle({
-                details: details,
-                spender: address(manager),
-                sigDeadline: defaultDeadline
-            });
-        bytes memory signature = getPermitSignature(
-            permit,
-            ownerPrivateKey,
-            permit2.DOMAIN_SEPARATOR()
-        );
-        ISubscriptionManager.Payment memory payment = ISubscriptionManager
-            .Payment({
-                token: address(token1),
-                nonce: defaultNonce,
-                amount: defaultAmount,
-                deadline: defaultDeadline,
-                approvalExpiration: defaultExpiration,
-                signature: signature
-            });
-        vm.startPrank(owner);
-        manager.subscribe(owner, 4 weeks, payment);
-        vm.stopPrank();
-
-        vm.warp(4 weeks + 1 seconds);
-        ISubscriptionManager.ClaimInfo[]
-            memory claimInfos = new ISubscriptionManager.ClaimInfo[](1);
-        claimInfos[0] = ISubscriptionManager.ClaimInfo(
-            true,
-            address(token1),
-            owner
-        );
-        vm.startPrank(admin);
-        manager.claimFees(claimInfos);
-        vm.stopPrank();
-
-        assertEq(token1.balanceOf(recipient), defaultFee * 2);
-    }
-
-    function testClaimFeesNotUseStorageStandardPermitFailWithInvalidChain() public {
-        SigUtils.Permit memory permit = SigUtils.Permit({
-            owner: owner,
-            spender: address(manager),
-            value: defaultAmount,
-            nonce: defaultNonce,
-            deadline: defaultDeadline
-        });
-
-        bytes32 digest = sigUtils.getTypedDataHash(permit);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
-
-        ISubscriptionManager.Payment memory payment = ISubscriptionManager
-            .Payment({
-                token: address(token),
-                nonce: defaultNonce,
-                amount: defaultAmount,
-                deadline: defaultDeadline,
-                approvalExpiration: defaultExpiration,
-                signature: signature
-            });
-
-        vm.startPrank(owner);
-        manager.subscribe(owner, 4 weeks, payment);
-        vm.stopPrank();
-
-        vm.warp(4 weeks + 1 seconds);
-
-        ISubscriptionManager.ClaimInfo[]
-            memory claimInfos = new ISubscriptionManager.ClaimInfo[](1);
-        claimInfos[0] = ISubscriptionManager.ClaimInfo(
-            false,
-            address(token),
-            owner
-        );
+    function testClaimUnauthorized() public {
+        address[] memory addresses = new address[](2);
+        addresses[0] = bob;
+        addresses[1] = alice;
 
         bytes4 selector = bytes4(
-            keccak256("SubscriptionManager__InvalidChain()")
+            keccak256("AccessControl__RoleMissing(bytes32,address)")
         );
-        vm.expectRevert(abi.encodeWithSelector(selector));
+        vm.expectRevert(abi.encodeWithSelector(selector, OPERATOR_ROLE, bob));
 
-        vm.startPrank(admin);
-        manager.claimFees(claimInfos);
+        vm.startPrank(bob);
+        manager.claimFees(addresses);
         vm.stopPrank();
     }
 
-    function testClaimFeesNotUseStoragePermit2FailWithInvalidChain() public {
-        IAllowanceTransfer.PermitDetails memory details = IAllowanceTransfer
-            .PermitDetails(
-                address(token1),
-                defaultAmount,
-                defaultExpiration,
-                defaultNonce
-            );
-        IAllowanceTransfer.PermitSingle memory permit = IAllowanceTransfer
-            .PermitSingle({
-                details: details,
-                spender: address(manager),
-                sigDeadline: defaultDeadline
-            });
-        bytes memory signature = getPermitSignature(
-            permit,
-            ownerPrivateKey,
-            permit2.DOMAIN_SEPARATOR()
-        );
-        ISubscriptionManager.Payment memory payment = ISubscriptionManager
-            .Payment({
-                token: address(token1),
-                nonce: defaultNonce,
-                amount: defaultAmount,
-                deadline: defaultDeadline,
-                approvalExpiration: defaultExpiration,
-                signature: signature
-            });
-        vm.startPrank(owner);
-        manager.subscribe(owner, 4 weeks, payment);
-        vm.stopPrank();
-
-        vm.warp(4 weeks + 1 seconds);
-
-        ISubscriptionManager.ClaimInfo[]
-            memory claimInfos = new ISubscriptionManager.ClaimInfo[](1);
-        claimInfos[0] = ISubscriptionManager.ClaimInfo(
-            true,
-            address(token1),
-            owner
-        );
-
-        bytes4 selector = bytes4(
-            keccak256("SubscriptionManager__InvalidChain()")
-        );
-        vm.expectRevert(abi.encodeWithSelector(selector));
-
-        vm.startPrank(admin);
-        manager.claimFees(claimInfos);
-        vm.stopPrank();
-    }
-
-    
-    function testClaimFeesUseStorageStandardPermitFailWithInvalidChain() public {
-        vm.startPrank(admin);
-        manager.toggleUseStorage();
-        vm.stopPrank();
-
-        SigUtils.Permit memory permit = SigUtils.Permit({
-            owner: owner,
-            spender: address(manager),
-            value: defaultAmount,
-            nonce: defaultNonce,
-            deadline: defaultDeadline
-        });
-
-        bytes32 digest = sigUtils.getTypedDataHash(permit);
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerPrivateKey, digest);
-        bytes memory signature = abi.encodePacked(r, s, v);
-
-        ISubscriptionManager.Payment memory payment = ISubscriptionManager
-            .Payment({
-                token: address(token),
-                nonce: defaultNonce,
-                amount: defaultAmount,
-                deadline: defaultDeadline,
-                approvalExpiration: defaultExpiration,
-                signature: signature
-            });
-
-        vm.startPrank(owner);
-        manager.subscribe(owner, 4 weeks, payment);
-        vm.stopPrank();
-
-        vm.warp(4 weeks + 1 seconds);
-
-        bytes4 selector = bytes4(
-            keccak256("SubscriptionManager__InvalidChain()")
-        );
-        vm.expectRevert(abi.encodeWithSelector(selector));
-
-        vm.startPrank(admin);
-        manager.claimFees(address(token));
-        vm.stopPrank();
-    }
-    function testClaimFeesUseStoragePermit2FailWithInvalidChain() public {
-        vm.startPrank(admin);
-        manager.toggleUseStorage();
-        vm.stopPrank();
-
-        IAllowanceTransfer.PermitDetails memory details = IAllowanceTransfer
-            .PermitDetails(
-                address(token1),
-                defaultAmount,
-                defaultExpiration,
-                defaultNonce
-            );
-        IAllowanceTransfer.PermitSingle memory permit = IAllowanceTransfer
-            .PermitSingle({
-                details: details,
-                spender: address(manager),
-                sigDeadline: defaultDeadline
-            });
-        bytes memory signature = getPermitSignature(
-            permit,
-            ownerPrivateKey,
-            permit2.DOMAIN_SEPARATOR()
-        );
-        ISubscriptionManager.Payment memory payment = ISubscriptionManager
-            .Payment({
-                token: address(token1),
-                nonce: defaultNonce,
-                amount: defaultAmount,
-                deadline: defaultDeadline,
-                approvalExpiration: defaultExpiration,
-                signature: signature
-            });
-        vm.startPrank(owner);
-        manager.subscribe(owner, 4 weeks, payment);
-        vm.stopPrank();
-
-        vm.warp(4 weeks + 1 seconds);
+    function testDistributeBonus() public {
+        ISubscriptionManager.Bonus[] memory bonuses = new ISubscriptionManager.Bonus[](2);
+        bonuses[0] = ISubscriptionManager.Bonus(bob, 15);
+        bonuses[1] = ISubscriptionManager.Bonus(alice, 10);
         
-        bytes4 selector = bytes4(
-            keccak256("SubscriptionManager__InvalidChain()")
-        );
-        vm.expectRevert(abi.encodeWithSelector(selector));
+        vm.startPrank(recipient);
+        manager.distributeBonuses(bonuses);
+        vm.stopPrank();
 
-        vm.startPrank(admin);
-        manager.claimFees(address(token1));
+        assertEq(token.balanceOf(address(manager)), defaultAmount - 25);
+        assertEq(token.balanceOf(bob), defaultAmount + 15);
+        assertEq(token.balanceOf(alice), defaultAmount + 10);
+    }
+
+    function testDistributeBonusUnauthorized() public {
+        ISubscriptionManager.Bonus[] memory bonuses = new ISubscriptionManager.Bonus[](2);
+        bonuses[0] = ISubscriptionManager.Bonus(bob, 15);
+        bonuses[1] = ISubscriptionManager.Bonus(alice, 10);
+
+        bytes4 selector = bytes4(
+            keccak256("AccessControl__RoleMissing(bytes32,address)")
+        );
+        vm.expectRevert(abi.encodeWithSelector(selector, TREASURER_ROLE, bob));
+        
+        vm.startPrank(bob);
+        manager.distributeBonuses(bonuses);
         vm.stopPrank();
     }
 }

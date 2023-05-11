@@ -42,8 +42,8 @@ async function main() {
         "SubscriptionManager",
         [
             "0xa6Eb9c9ba8F77c6D8534203f620953c71dA36407",
-            ethers.utils.parseEther("30"),
-            "0x58f5663cCb305366F584b5f4dF523728D5479396",
+            50000000,
+            "0xB644e9B2b38DA1752dA7AE3767E829bcAbBf688f",
         ],
         true,
         "contracts/SubscriptionManager.sol:SubscriptionManager",

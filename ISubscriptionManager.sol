@@ -28,6 +28,11 @@ interface ISubscriptionManager {
         uint256 bonus;
     }
 
+    struct Claim {
+        address from;
+        uint256 discountPercentage;
+    }
+
     event Distributed(
         address indexed operator,
         uint256[] success,
@@ -58,5 +63,9 @@ interface ISubscriptionManager {
 
     function claimFees(
         address[] calldata accounts_
+    ) external returns (uint256[] memory success, bytes[] memory results);
+
+    function claimFees(
+        Claim[] calldata claims_
     ) external returns (uint256[] memory success, bytes[] memory results);
 }

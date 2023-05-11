@@ -12,7 +12,7 @@
         "deploy:fujiTest": "hardhat run --network fujiTest scripts/deploy.ts",
         "deploy:goerli": "hardhat run --network goerli scripts/deploy.ts",
         "deploy:tomoTest": "hardhat run --network tomoTest scripts/deploy.ts",
-        "upgrade:bscTest": "hardhat run --network bscTest scripts/upgrade.ts",
+        "upgrade:fujiTest": "hardhat run --network fujiTest scripts/upgrade.ts",
         "upgrade:goerli": "hardhat run --network goerli scripts/upgrade.ts",
         "upgrade:tomoTest": "hardhat run --network tomoTest scripts/upgrade.ts",
         "verify:bscTest": "hardhat verify --network bscTest",
