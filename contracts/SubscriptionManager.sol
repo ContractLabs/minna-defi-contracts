@@ -8,6 +8,9 @@ import {
     UUPSUpgradeable
 } from "oz-custom/contracts/oz-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {
+    PausableUpgradeable
+} from "oz-custom/contracts/oz-upgradeable/security/PausableUpgradeable.sol";
+import {
     IERC20Upgradeable
 } from "oz-custom/contracts/oz-upgradeable/token/ERC20/IERC20Upgradeable.sol";
 import {
@@ -16,6 +19,7 @@ import {
 
 contract SubscriptionManager is
     UUPSUpgradeable,
+    PausableUpgradeable,
     ISubscriptionManager,
     AccessControlUpgradeable,
     FundRecoverableUpgradeable
@@ -36,14 +40,23 @@ contract SubscriptionManager is
         uint96 amount_,
         address recipient_
     ) external initializer {
+        __Pausable_init_unchained();
+
         address sender = _msgSender();
+
+        bytes32 upgraderRole = UPGRADER_ROLE;
+        bytes32 treasurerRole = TREASURER_ROLE;
+        bytes32 operatorRole = OPERATOR_ROLE;
+
         _setPayment(sender, payment_);
         _setFeeInfo(recipient_, amount_, feeInfo);
 
-        _grantRole(UPGRADER_ROLE, sender);
-        _grantRole(OPERATOR_ROLE, operator_);
-        _grantRole(OPERATOR_ROLE, recipient_);
-        _grantRole(TREASURER_ROLE, recipient_);
+        _grantRole(upgraderRole, sender);
+
+        _grantRole(operatorRole, operator_);
+
+        _grantRole(operatorRole, recipient_);
+        _grantRole(treasurerRole, recipient_);
         _grantRole(DEFAULT_ADMIN_ROLE, recipient_);
     }
 
@@ -54,7 +67,7 @@ contract SubscriptionManager is
     function setFeeInfo(
         address recipient_,
         uint96 amount_
-    ) external onlyRole(TREASURER_ROLE) {
+    ) external onlyRole(TREASURER_ROLE) whenNotPaused {
         FeeInfo memory _feeInfo = feeInfo;
 
         if (recipient_ != _feeInfo.recipient) {
@@ -75,6 +88,7 @@ contract SubscriptionManager is
     )
         public
         onlyRole(TREASURER_ROLE)
+        whenNotPaused
         returns (uint256[] memory success, bytes[] memory results)
     {
         uint256 length = bonuses.length;
@@ -116,6 +130,7 @@ contract SubscriptionManager is
     )
         public
         onlyRole(OPERATOR_ROLE)
+        whenNotPaused
         returns (uint256[] memory success, bytes[] memory results)
     {
         uint256 length = accounts_.length;
@@ -151,7 +166,9 @@ contract SubscriptionManager is
         emit Claimed(_msgSender(), success, results);
     }
 
-    function withdraw(uint256 amount_) public onlyRole(TREASURER_ROLE) {
+    function withdraw(
+        uint256 amount_
+    ) public onlyRole(TREASURER_ROLE) whenNotPaused {
         FeeInfo memory _feeInfo = feeInfo;
         address _payment = payment;
 
@@ -184,9 +201,13 @@ contract SubscriptionManager is
         _checkRole(TREASURER_ROLE, _msgSender());
     }
 
+    function pause() external override {}
+
+    function unpause() external override {}
+
     function _authorizeUpgrade(
         address newImplementation
     ) internal virtual override onlyRole(UPGRADER_ROLE) {}
 
-    uint256[45] private __gap;
+    uint256[48] private __gap;
 }
