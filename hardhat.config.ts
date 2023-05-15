@@ -28,7 +28,7 @@ const config: HardhatUserConfig = {
             },
             optimizer: {
                 enabled: true,
-                runs: 1_000_000,
+                runs: 1_000,
             },
         },
     },
@@ -39,6 +39,7 @@ const config: HardhatUserConfig = {
             bscTestnet: process.env.TBSC_API_KEY || "",
             goerli: process.env.ETH_API_KEY || "",
             avalancheFujiTestnet: process.env.AVA_API_KEY || "",
+            avalanche: process.env.AVA_API_KEY || "",
         },
     },
     networks: {
@@ -91,7 +92,7 @@ const config: HardhatUserConfig = {
                     : []
         },
         fuji: {
-            url: "https://avalanche-c-chain.publicnode.com",
+            url: "https://api.avax.network/ext/bc/C/rpc",
             chainId: 43114,
             accounts:
                 process.env.PRIVATE_KEY !== undefined

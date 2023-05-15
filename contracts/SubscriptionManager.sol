@@ -60,6 +60,10 @@ contract SubscriptionManager is
         _grantRole(DEFAULT_ADMIN_ROLE, recipient_);
     }
 
+    function pause() external override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
+    function unpause() external override onlyRole(DEFAULT_ADMIN_ROLE) {}
+
     function setPayment(address payment_) external onlyRole(TREASURER_ROLE) {
         _setPayment(_msgSender(), payment_);
     }
@@ -200,10 +204,6 @@ contract SubscriptionManager is
     function _beforeRecover(bytes memory) internal view override {
         _checkRole(TREASURER_ROLE, _msgSender());
     }
-
-    function pause() external override {}
-
-    function unpause() external override {}
 
     function _authorizeUpgrade(
         address newImplementation

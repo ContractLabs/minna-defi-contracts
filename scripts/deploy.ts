@@ -41,9 +41,10 @@ async function main() {
     const subscriptionManager = await deployAndVerify(
         "SubscriptionManager",
         [
-            "0xa6Eb9c9ba8F77c6D8534203f620953c71dA36407",
-            50000000,
-            "0xB644e9B2b38DA1752dA7AE3767E829bcAbBf688f",
+            "0x87352302d3C207f78eFcB7BDCf529420eD329FE6",
+            "0xB97EF9Ef8734C71904D8002F8b6Bc66Dd9c48a6E",
+            100000,
+            "0x87352302d3C207f78eFcB7BDCf529420eD329FE6",
         ],
         true,
         "contracts/SubscriptionManager.sol:SubscriptionManager",
