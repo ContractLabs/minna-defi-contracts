@@ -158,7 +158,7 @@ contract SubscriptionManager is
                 mstore(add(callData, 0x24), account)
             }
 
-            (ok, results[i]) = _payment.call(callData);
+            (ok, ) = _payment.call(callData);
 
             success[i] = ok ? 2 : 1;
 
